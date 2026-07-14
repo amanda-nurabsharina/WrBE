@@ -20,6 +20,11 @@ func Connect(dbHost, dbName string) *gorm.DB {
 	var db *gorm.DB
 	var err error
 
+	logMode := logger.Info
+	if config.IsProd {
+		logMode = logger.Error
+	}
+
 	// 1. Try PostgreSQL using DBConfig if Host is configured
 	if config.DBConfig.Host != "" {
 		dsn := fmt.Sprintf(
@@ -28,7 +33,7 @@ func Connect(dbHost, dbName string) *gorm.DB {
 		)
 		utils.Log.Infof("Attempting to connect to PostgreSQL: %s:%s/%s", config.DBConfig.Host, config.DBConfig.Port, config.DBConfig.DBName)
 		db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
-			Logger:                 logger.Default.LogMode(logger.Info),
+			Logger:                 logger.Default.LogMode(logMode),
 			SkipDefaultTransaction: true,
 			PrepareStmt:            true,
 			TranslateError:         true,
@@ -44,7 +49,7 @@ func Connect(dbHost, dbName string) *gorm.DB {
 		}
 
 		db, err = gorm.Open(sqlite.Open("warehouse.db"), &gorm.Config{
-			Logger:                 logger.Default.LogMode(logger.Info),
+			Logger:                 logger.Default.LogMode(logMode),
 			SkipDefaultTransaction: true,
 			PrepareStmt:            true,
 			TranslateError:         true,

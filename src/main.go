@@ -50,7 +50,12 @@ func setupFiberApp() *fiber.App {
 	app := fiber.New(config.FiberConfig())
 
 	// Middleware setup
-	app.Use(cors.New())
+	app.Use(cors.New(cors.Config{
+		AllowOrigins:     "*",
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, Accept-Language",
+		AllowMethods:     "GET, POST, HEAD, PUT, DELETE, PATCH, OPTIONS",
+		AllowCredentials: true,
+	}))
 	app.Use("/v1/auth", middleware.LimiterConfig())
 	app.Use(middleware.LoggerConfig())
 	app.Use(helmet.New())

@@ -73,7 +73,7 @@ func Connect(dbHost, dbName string) *gorm.DB {
 	utils.Log.Info("Running database migrations...")
 	if err := db.AutoMigrate(
 		&model.User{}, &model.Token{}, &model.Role{},
-		&model.Product{}, &model.Warehouse{}, &model.Location{},
+		&model.PackagingUnit{}, &model.Product{}, &model.Warehouse{}, &model.Location{},
 		&model.Supplier{}, &model.InventoryBatch{}, &model.StockTransaction{},
 	); err != nil {
 		utils.Log.Errorf("Failed to auto-migrate tables: %v", err)
@@ -212,14 +212,37 @@ func seedDatabase(db *gorm.DB) {
 		db.Where("rack = ?", "Rack-B1").First(&rack3)
 	}
 
+	// 5.5. Seed Packaging Units
+	utils.Log.Info("Seeding default packaging units...")
+	var packCount int64
+	db.Model(&model.PackagingUnit{}).Count(&packCount)
+	if packCount == 0 {
+		units := []model.PackagingUnit{
+			{Code: "DUS", Name: "Dus", Description: "Kemasan karton dus"},
+			{Code: "KRG", Name: "Karung", Description: "Kemasan karung sak"},
+			{Code: "BTL", Name: "Botol", Description: "Kemasan botol plastik/kaca"},
+			{Code: "JRG", Name: "Jerigen", Description: "Kemasan jerigen plastik"},
+			{Code: "DRM", Name: "Drum", Description: "Kemasan drum besi/plastik"},
+			{Code: "PCS", Name: "Pcs", Description: "Kemasan satuan pieces"},
+		}
+		for _, u := range units {
+			db.Create(&u)
+		}
+		utils.Log.Info("Successfully seeded default packaging units")
+	}
+
+	var dusPack, krgPack model.PackagingUnit
+	db.Where("code = ?", "DUS").First(&dusPack)
+	db.Where("code = ?", "KRG").First(&krgPack)
+
 	// 6. Seed Suppliers
 	utils.Log.Info("Seeding default suppliers...")
 	var supCount int64
 	db.Model(&model.Supplier{}).Count(&supCount)
 	if supCount == 0 {
 		suppliers := []model.Supplier{
-			{Name: "BioFarma Corp", Phone: "021-123456", Email: "contact@biofarma.com"},
-			{Name: "Kalbe Farma", Phone: "021-987654", Email: "info@kalbe.co.id"},
+			{Name: "SANTANI Agro Mandiri", Phone: "021-543210", Email: "contact@santani.co.id"},
+			{Name: "Syngenta Indonesia", Phone: "021-300488", Email: "info.indonesia@syngenta.com"},
 		}
 		for _, sup := range suppliers {
 			db.Create(&sup)
@@ -233,17 +256,59 @@ func seedDatabase(db *gorm.DB) {
 	var prodCount int64
 	db.Model(&model.Product{}).Count(&prodCount)
 	if prodCount == 0 {
-		p1 = model.Product{Code: "PRD-PCT", Barcode: "8991234567890", Name: "Paracetamol 500mg", CategoryID: "Medicine", Unit: "Box", MinimumStock: 20}
-		p2 = model.Product{Code: "PRD-AMX", Barcode: "8991234567891", Name: "Amoxicillin 250mg", CategoryID: "Medicine", Unit: "Box", MinimumStock: 15}
-		p3 = model.Product{Code: "PRD-VIT", Barcode: "8991234567892", Name: "Vitamin C 1000mg", CategoryID: "Vitamin", Unit: "Bottle", MinimumStock: 10}
+		p1 = model.Product{
+			Code:             "NPK-15",
+			Barcode:          "8991234567890",
+			Name:             "Santani NPK 15-15-15",
+			CategoryID:       "Pupuk",
+			SubCategory:      "Pupuk",
+			RegCategory:      "non-B3",
+			Unit:             "Kg",
+			PackagingUnitID:  krgPack.ID,
+			ConversionRatio:  50,
+			PurchasePrice:    450000,
+			PriceDistributor: 480000,
+			PriceRetail:      500000,
+			MinimumStock:     100,
+		}
+		p2 = model.Product{
+			Code:             "GLY-480",
+			Barcode:          "8991234567891",
+			Name:             "Santani Glyphosate 480 SL",
+			CategoryID:       "Pestisida",
+			SubCategory:      "Herbisida",
+			RegCategory:      "B3",
+			Unit:             "Liter",
+			PackagingUnitID:  dusPack.ID,
+			ConversionRatio:  20,
+			PurchasePrice:    950000,
+			PriceDistributor: 1050000,
+			PriceRetail:      1100000,
+			MinimumStock:     50,
+		}
+		p3 = model.Product{
+			Code:             "CAR-50",
+			Barcode:          "8991234567892",
+			Name:             "Santani Carbendazim 50 WP",
+			CategoryID:       "Pestisida",
+			SubCategory:      "Fungisida",
+			RegCategory:      "B3",
+			Unit:             "Kg",
+			PackagingUnitID:  dusPack.ID,
+			ConversionRatio:  10,
+			PurchasePrice:    650000,
+			PriceDistributor: 720000,
+			PriceRetail:      750000,
+			MinimumStock:     30,
+		}
 		db.Create(&p1)
 		db.Create(&p2)
 		db.Create(&p3)
 		utils.Log.Info("Successfully seeded default products")
 	} else {
-		db.Where("code = ?", "PRD-PCT").First(&p1)
-		db.Where("code = ?", "PRD-AMX").First(&p2)
-		db.Where("code = ?", "PRD-VIT").First(&p3)
+		db.Where("code = ?", "NPK-15").First(&p1)
+		db.Where("code = ?", "GLY-480").First(&p2)
+		db.Where("code = ?", "CAR-50").First(&p3)
 	}
 
 	// 8. Seed Batches to demonstrate FEFO and warning categories
@@ -255,57 +320,57 @@ func seedDatabase(db *gorm.DB) {
 		// Red: Expired
 		b1 := model.InventoryBatch{
 			ProductID:     p1.ID,
-			BatchNumber:   "B-PCT-EXP",
+			BatchNumber:   "B-NPK-EXP",
 			ExpiredDate:   now.AddDate(0, 0, -10), // expired 10 days ago
 			Qty:           20,
 			WarehouseID:   warehouse.ID,
 			LocationID:    rack1.ID,
-			PurchasePrice: 15000,
+			PurchasePrice: 450000,
 			Status:        "expired",
 		}
 		// Orange: Near-Expired (<30 days)
 		b2 := model.InventoryBatch{
 			ProductID:     p1.ID,
-			BatchNumber:   "B-PCT-30D",
+			BatchNumber:   "B-NPK-30D",
 			ExpiredDate:   now.AddDate(0, 0, 15), // expires in 15 days
 			Qty:           50,
 			WarehouseID:   warehouse.ID,
 			LocationID:    rack1.ID,
-			PurchasePrice: 15000,
+			PurchasePrice: 450000,
 			Status:        "active",
 		}
 		// Yellow: Hampir Expired (30-90 days)
 		b3 := model.InventoryBatch{
 			ProductID:     p1.ID,
-			BatchNumber:   "B-PCT-90D",
+			BatchNumber:   "B-NPK-90D",
 			ExpiredDate:   now.AddDate(0, 0, 60), // expires in 60 days
 			Qty:           30,
 			WarehouseID:   warehouse.ID,
 			LocationID:    rack2.ID,
-			PurchasePrice: 15000,
+			PurchasePrice: 450000,
 			Status:        "active",
 		}
 		// Green: Safe (>90 days)
 		b4 := model.InventoryBatch{
 			ProductID:     p1.ID,
-			BatchNumber:   "B-PCT-SAFE",
+			BatchNumber:   "B-NPK-SAFE",
 			ExpiredDate:   now.AddDate(0, 0, 180), // expires in 180 days
 			Qty:           100,
 			WarehouseID:   warehouse.ID,
 			LocationID:    rack2.ID,
-			PurchasePrice: 15000,
+			PurchasePrice: 450000,
 			Status:        "active",
 		}
 
-		// Amoxicillin batches
+		// Glyphosate batches
 		b5 := model.InventoryBatch{
 			ProductID:     p2.ID,
-			BatchNumber:   "B-AMX-SAFE",
+			BatchNumber:   "B-GLY-SAFE",
 			ExpiredDate:   now.AddDate(0, 0, 120), // expires in 120 days
 			Qty:           80,
 			WarehouseID:   warehouse.ID,
 			LocationID:    rack3.ID,
-			PurchasePrice: 28000,
+			PurchasePrice: 950000,
 			Status:        "active",
 		}
 

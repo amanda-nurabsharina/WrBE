@@ -30,6 +30,10 @@ func IMSRoutes(
 	supService := service.NewSupplierService(db, validate)
 	supController := controller.NewSupplierController(supService)
 
+	// Initialize Packaging service & controller directly inside IMSRoutes
+	packService := service.NewPackagingService(db, validate)
+	packController := controller.NewPackagingController(packService)
+
 	// Authorization middleware check helper
 	auth := m.Auth(u)
 
@@ -48,6 +52,14 @@ func IMSRoutes(
 	suppliers.Get("/:id", supController.GetSupplierByID)
 	suppliers.Put("/:id", supController.UpdateSupplier)
 	suppliers.Delete("/:id", supController.DeleteSupplier)
+
+	// Packaging Units
+	packagingUnits := v1.Group("/packaging-units", auth)
+	packagingUnits.Get("/", packController.GetPackagingUnits)
+	packagingUnits.Post("/", packController.CreatePackagingUnit)
+	packagingUnits.Get("/:id", packController.GetPackagingUnitByID)
+	packagingUnits.Put("/:id", packController.UpdatePackagingUnit)
+	packagingUnits.Delete("/:id", packController.DeletePackagingUnit)
 
 	// Batches
 	batches := v1.Group("/inventory/batches", auth)
@@ -68,6 +80,7 @@ func IMSRoutes(
 
 	// Stock Opname
 	v1.Post("/stock-opname", auth, txController.CreateStockOpname)
+	v1.Get("/inventory/adjustment", auth, txController.GetTransactions)
 
 	// Dashboard
 	v1.Get("/dashboard", auth, dashController.GetDashboardData)

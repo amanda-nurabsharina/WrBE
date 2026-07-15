@@ -1,20 +1,49 @@
 package validation
 
 type CreateProduct struct {
-	Code         string `json:"code" validate:"required,min=3,max=50"`
-	Barcode      string `json:"barcode" validate:"max=50"`
-	Name         string `json:"name" validate:"required,min=3,max=100"`
-	CategoryID   string `json:"category_id" validate:"max=50"`
-	Unit         string `json:"unit" validate:"required,max=20"`
-	MinimumStock int    `json:"minimum_stock" validate:"min=0"`
+	Code             string  `json:"code" validate:"required,min=3,max=50"`
+	Barcode          string  `json:"barcode" validate:"max=50"`
+	Name             string  `json:"name" validate:"required,min=3,max=100"`
+	CategoryID       string  `json:"category_id" validate:"max=50"`
+	Unit             string  `json:"unit" validate:"required,max=20"`
+	MinimumStock     int     `json:"minimum_stock" validate:"min=0"`
+	RegCategory      string  `json:"reg_category" validate:"required,max=20"`
+	KementanRegNo    string  `json:"kementan_reg_no" validate:"max=100"`
+	MSDSReference    string  `json:"msds_reference" validate:"max=255"`
+	SubCategory      string  `json:"sub_category" validate:"required,max=50"`
+	PackagingUnitID  string  `json:"packaging_unit_id" validate:"required,uuid"`
+	ConversionRatio  int     `json:"conversion_ratio" validate:"required,min=1"`
+	PurchasePrice    float64 `json:"purchase_price" validate:"min=0"`
+	PriceDistributor float64 `json:"price_distributor" validate:"min=0"`
+	PriceRetail      float64 `json:"price_retail" validate:"min=0"`
 }
 
 type UpdateProduct struct {
-	Barcode      string `json:"barcode" validate:"max=50"`
-	Name         string `json:"name" validate:"min=3,max=100"`
-	CategoryID   string `json:"category_id" validate:"max=50"`
-	Unit         string `json:"unit" validate:"max=20"`
-	MinimumStock *int   `json:"minimum_stock" validate:"omitempty,min=0"`
+	Barcode          string   `json:"barcode" validate:"max=50"`
+	Name             string   `json:"name" validate:"min=3,max=100"`
+	CategoryID       string   `json:"category_id" validate:"max=50"`
+	Unit             string   `json:"unit" validate:"max=20"`
+	MinimumStock     *int     `json:"minimum_stock" validate:"omitempty,min=0"`
+	RegCategory      string   `json:"reg_category" validate:"max=20"`
+	KementanRegNo    string   `json:"kementan_reg_no" validate:"max=100"`
+	MSDSReference    string   `json:"msds_reference" validate:"max=255"`
+	SubCategory      string   `json:"sub_category" validate:"max=50"`
+	PackagingUnitID  string   `json:"packaging_unit_id" validate:"omitempty,uuid"`
+	ConversionRatio  *int     `json:"conversion_ratio" validate:"omitempty,min=1"`
+	PurchasePrice    *float64 `json:"purchase_price" validate:"omitempty,min=0"`
+	PriceDistributor *float64 `json:"price_distributor" validate:"omitempty,min=0"`
+	PriceRetail      *float64 `json:"price_retail" validate:"omitempty,min=0"`
+}
+
+type CreatePackagingUnit struct {
+	Code        string `json:"code" validate:"required,min=2,max=50"`
+	Name        string `json:"name" validate:"required,min=2,max=100"`
+	Description string `json:"description" validate:"max=255"`
+}
+
+type UpdatePackagingUnit struct {
+	Name        string `json:"name" validate:"required,min=2,max=100"`
+	Description string `json:"description" validate:"max=255"`
 }
 
 type InwardRequest struct {

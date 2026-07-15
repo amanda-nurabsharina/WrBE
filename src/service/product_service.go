@@ -37,15 +37,39 @@ func NewProductService(db *gorm.DB, validate *validator.Validate) ProductService
 
 func (s *productService) GetProducts(c *fiber.Ctx, search string) ([]model.Product, error) {
 	var products []model.Product
-	query := s.DB.WithContext(c.Context()).Model(&model.Product{}).Order("code asc")
+	query := s.DB.WithContext(c.Context()).Model(&model.Product{}).Preload("PackagingUnit").Order("code asc")
 
 	if search != "" {
-		query = query.Where("code LIKE ? OR name LIKE ? OR category_id LIKE ?", "%"+search+"%", "%"+search+"%", "%"+search+"%")
+		query = query.Where("code LIKE ? OR name LIKE ? OR category_id LIKE ? OR sub_category LIKE ?", "%"+search+"%", "%"+search+"%", "%"+search+"%", "%"+search+"%")
 	}
 
 	if err := query.Find(&products).Error; err != nil {
 		s.Log.Errorf("Failed to query products: %v", err)
 		return nil, fiber.NewError(fiber.StatusInternalServerError, "Database error")
+	}
+
+	// Calculate and populate total stock
+	type ProductStock struct {
+		ProductID uuid.UUID
+		TotalQty  int
+	}
+	var stocks []ProductStock
+	if len(products) > 0 {
+		if err := s.DB.WithContext(c.Context()).Model(&model.InventoryBatch{}).
+			Select("product_id, SUM(qty) as total_qty").
+			Group("product_id").
+			Scan(&stocks).Error; err != nil {
+			s.Log.Warnf("Failed to query product stock: %v", err)
+		}
+	}
+
+	stockMap := make(map[uuid.UUID]int)
+	for _, st := range stocks {
+		stockMap[st.ProductID] = st.TotalQty
+	}
+
+	for i := range products {
+		products[i].Stock = stockMap[products[i].ID]
 	}
 
 	return products, nil
@@ -58,13 +82,21 @@ func (s *productService) GetProductByID(c *fiber.Ctx, id string) (*model.Product
 		return nil, fiber.NewError(fiber.StatusBadRequest, "Invalid UUID format")
 	}
 
-	if err := s.DB.WithContext(c.Context()).First(&product, "id = ?", uid).Error; err != nil {
+	if err := s.DB.WithContext(c.Context()).Preload("PackagingUnit").First(&product, "id = ?", uid).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, fiber.NewError(fiber.StatusNotFound, "Product not found")
 		}
 		s.Log.Errorf("Failed to query product: %v", err)
 		return nil, fiber.NewError(fiber.StatusInternalServerError, "Database error")
 	}
+
+	// Fetch stock
+	var totalStock int
+	s.DB.WithContext(c.Context()).Model(&model.InventoryBatch{}).
+		Where("product_id = ?", product.ID).
+		Select("COALESCE(SUM(qty), 0)").
+		Scan(&totalStock)
+	product.Stock = totalStock
 
 	return &product, nil
 }
@@ -81,19 +113,36 @@ func (s *productService) CreateProduct(c *fiber.Ctx, req *validation.CreateProdu
 		return nil, fiber.NewError(fiber.StatusBadRequest, "Product code already exists")
 	}
 
+	packUUID, err := uuid.Parse(req.PackagingUnitID)
+	if err != nil {
+		return nil, fiber.NewError(fiber.StatusBadRequest, "Invalid Packaging Unit UUID format")
+	}
+
 	product := model.Product{
-		Code:         req.Code,
-		Barcode:      req.Barcode,
-		Name:         req.Name,
-		CategoryID:   req.CategoryID,
-		Unit:         req.Unit,
-		MinimumStock: req.MinimumStock,
+		Code:             req.Code,
+		Barcode:          req.Barcode,
+		Name:             req.Name,
+		CategoryID:       req.CategoryID,
+		Unit:             req.Unit,
+		MinimumStock:     req.MinimumStock,
+		RegCategory:      req.RegCategory,
+		KementanRegNo:    req.KementanRegNo,
+		MSDSReference:    req.MSDSReference,
+		SubCategory:      req.SubCategory,
+		PackagingUnitID:  packUUID,
+		ConversionRatio:  req.ConversionRatio,
+		PurchasePrice:    req.PurchasePrice,
+		PriceDistributor: req.PriceDistributor,
+		PriceRetail:      req.PriceRetail,
 	}
 
 	if err := s.DB.WithContext(c.Context()).Create(&product).Error; err != nil {
 		s.Log.Errorf("Failed to create product: %v", err)
 		return nil, fiber.NewError(fiber.StatusInternalServerError, "Database error")
 	}
+
+	// Preload the PackagingUnit relation
+	s.DB.WithContext(c.Context()).Preload("PackagingUnit").First(&product, "id = ?", product.ID)
 
 	return &product, nil
 }
@@ -123,11 +172,45 @@ func (s *productService) UpdateProduct(c *fiber.Ctx, id string, req *validation.
 	if req.MinimumStock != nil {
 		product.MinimumStock = *req.MinimumStock
 	}
+	if req.RegCategory != "" {
+		product.RegCategory = req.RegCategory
+	}
+	if req.KementanRegNo != "" {
+		product.KementanRegNo = req.KementanRegNo
+	}
+	if req.MSDSReference != "" {
+		product.MSDSReference = req.MSDSReference
+	}
+	if req.SubCategory != "" {
+		product.SubCategory = req.SubCategory
+	}
+	if req.PackagingUnitID != "" {
+		packUUID, err := uuid.Parse(req.PackagingUnitID)
+		if err != nil {
+			return nil, fiber.NewError(fiber.StatusBadRequest, "Invalid Packaging Unit UUID format")
+		}
+		product.PackagingUnitID = packUUID
+	}
+	if req.ConversionRatio != nil {
+		product.ConversionRatio = *req.ConversionRatio
+	}
+	if req.PurchasePrice != nil {
+		product.PurchasePrice = *req.PurchasePrice
+	}
+	if req.PriceDistributor != nil {
+		product.PriceDistributor = *req.PriceDistributor
+	}
+	if req.PriceRetail != nil {
+		product.PriceRetail = *req.PriceRetail
+	}
 
 	if err := s.DB.WithContext(c.Context()).Save(product).Error; err != nil {
 		s.Log.Errorf("Failed to update product: %v", err)
 		return nil, fiber.NewError(fiber.StatusInternalServerError, "Database error")
 	}
+
+	// Preload the PackagingUnit relation
+	s.DB.WithContext(c.Context()).Preload("PackagingUnit").First(product, "id = ?", product.ID)
 
 	return product, nil
 }

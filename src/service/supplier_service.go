@@ -40,7 +40,7 @@ func (s *supplierService) GetSuppliers(c *fiber.Ctx, search string) ([]model.Sup
 	query := s.DB.WithContext(c.Context()).Order("name asc")
 
 	if search != "" {
-		query = query.Where("name LIKE ? OR phone LIKE ? OR email LIKE ?", "%"+search+"%", "%"+search+"%", "%"+search+"%")
+		query = query.Where("name LIKE ? OR phone LIKE ? OR email LIKE ? OR pic LIKE ?", "%"+search+"%", "%"+search+"%", "%"+search+"%", "%"+search+"%")
 	}
 
 	if err := query.Find(&list).Error; err != nil {
@@ -75,9 +75,13 @@ func (s *supplierService) CreateSupplier(c *fiber.Ctx, req *validation.CreateSup
 	}
 
 	supplier := model.Supplier{
-		Name:  req.Name,
-		Phone: req.Phone,
-		Email: req.Email,
+		Name:        req.Name,
+		Phone:       req.Phone,
+		Email:       req.Email,
+		PIC:         req.PIC,
+		Address:     req.Address,
+		NPWP:        req.NPWP,
+		PaymentTerm: req.PaymentTerm,
 	}
 
 	if err := s.DB.WithContext(c.Context()).Create(&supplier).Error; err != nil {
@@ -103,6 +107,12 @@ func (s *supplierService) UpdateSupplier(c *fiber.Ctx, id string, req *validatio
 	}
 	supplier.Phone = req.Phone
 	supplier.Email = req.Email
+	supplier.PIC = req.PIC
+	supplier.Address = req.Address
+	supplier.NPWP = req.NPWP
+	if req.PaymentTerm != nil {
+		supplier.PaymentTerm = *req.PaymentTerm
+	}
 
 	if err := s.DB.WithContext(c.Context()).Save(supplier).Error; err != nil {
 		s.Log.Errorf("Failed to update supplier: %v", err)

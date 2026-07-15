@@ -74,7 +74,7 @@ func Connect(dbHost, dbName string) *gorm.DB {
 	if err := db.AutoMigrate(
 		&model.User{}, &model.Token{}, &model.Role{},
 		&model.PackagingUnit{}, &model.Product{}, &model.Warehouse{}, &model.Location{},
-		&model.Supplier{}, &model.InventoryBatch{}, &model.StockTransaction{},
+		&model.Supplier{}, &model.Customer{}, &model.InventoryBatch{}, &model.StockTransaction{},
 	); err != nil {
 		utils.Log.Errorf("Failed to auto-migrate tables: %v", err)
 	} else {
@@ -241,13 +241,62 @@ func seedDatabase(db *gorm.DB) {
 	db.Model(&model.Supplier{}).Count(&supCount)
 	if supCount == 0 {
 		suppliers := []model.Supplier{
-			{Name: "SANTANI Agro Mandiri", Phone: "021-543210", Email: "contact@santani.co.id"},
-			{Name: "Syngenta Indonesia", Phone: "021-300488", Email: "info.indonesia@syngenta.com"},
+			{
+				Name:        "SANTANI Agro Mandiri",
+				Phone:       "021-543210",
+				Email:       "contact@santani.co.id",
+				PIC:         "Ir. Hermawan",
+				Address:     "Gedung Santani, Jl. Jend. Sudirman Kav. 21, Jakarta",
+				NPWP:        "01.111.222.3-444.000",
+				PaymentTerm: 45,
+			},
+			{
+				Name:        "Syngenta Indonesia",
+				Phone:       "021-300488",
+				Email:       "info.indonesia@syngenta.com",
+				PIC:         "Rian Hidayat",
+				Address:     "Cilandak Commercial Estate, Building 100, Jakarta",
+				NPWP:        "02.222.333.4-555.000",
+				PaymentTerm: 30,
+			},
 		}
 		for _, sup := range suppliers {
 			db.Create(&sup)
 		}
 		utils.Log.Info("Successfully seeded default suppliers")
+	}
+
+	// 6.5. Seed Customers
+	utils.Log.Info("Seeding default customers...")
+	var custCount int64
+	db.Model(&model.Customer{}).Count(&custCount)
+	if custCount == 0 {
+		customers := []model.Customer{
+			{
+				Name:        "Toko Tani Makmur",
+				Phone:       "0812-3456-7890",
+				Email:       "makmur@tokotani.com",
+				PIC:         "Haji Makmur",
+				Address:     "Jl. Raya Pertanian No. 12, Sleman, Yogyakarta",
+				NPWP:        "01.234.567.8-901.000",
+				PaymentTerm: 30,
+				PriceTier:   "retail",
+			},
+			{
+				Name:        "Distributor Tani Nusantara",
+				Phone:       "021-7654-3210",
+				Email:       "contact@taninusantara.com",
+				PIC:         "Budi Santoso",
+				Address:     "Kawasan Industri Cikarang Blok B-3, Bekasi",
+				NPWP:        "02.345.678.9-012.000",
+				PaymentTerm: 60,
+				PriceTier:   "distributor",
+			},
+		}
+		for _, cust := range customers {
+			db.Create(&cust)
+		}
+		utils.Log.Info("Successfully seeded default customers")
 	}
 
 	// 7. Seed Products

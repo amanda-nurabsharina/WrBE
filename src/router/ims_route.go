@@ -34,6 +34,10 @@ func IMSRoutes(
 	packService := service.NewPackagingService(db, validate)
 	packController := controller.NewPackagingController(packService)
 
+	// Initialize Customer service & controller directly inside IMSRoutes
+	custService := service.NewCustomerService(db, validate)
+	custController := controller.NewCustomerController(custService)
+
 	// Authorization middleware check helper
 	auth := m.Auth(u)
 
@@ -52,6 +56,14 @@ func IMSRoutes(
 	suppliers.Get("/:id", supController.GetSupplierByID)
 	suppliers.Put("/:id", supController.UpdateSupplier)
 	suppliers.Delete("/:id", supController.DeleteSupplier)
+
+	// Customers
+	customers := v1.Group("/customers", auth)
+	customers.Get("/", custController.GetCustomers)
+	customers.Post("/", custController.CreateCustomer)
+	customers.Get("/:id", custController.GetCustomerByID)
+	customers.Put("/:id", custController.UpdateCustomer)
+	customers.Delete("/:id", custController.DeleteCustomer)
 
 	// Packaging Units
 	packagingUnits := v1.Group("/packaging-units", auth)

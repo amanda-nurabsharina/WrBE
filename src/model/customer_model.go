@@ -7,7 +7,7 @@ import (
 	"gorm.io/gorm"
 )
 
-type Supplier struct {
+type Customer struct {
 	ID          uuid.UUID `gorm:"primaryKey;not null" json:"id"`
 	Name        string    `gorm:"not null;type:varchar(100)" json:"name"`
 	Phone       string    `gorm:"type:varchar(20)" json:"phone"`
@@ -16,11 +16,12 @@ type Supplier struct {
 	Address     string    `gorm:"type:text" json:"address"`
 	NPWP        string    `gorm:"type:varchar(50)" json:"npwp"`
 	PaymentTerm int       `gorm:"type:integer;default:0" json:"payment_term"` // termin pembayaran in days
+	PriceTier   string    `gorm:"type:varchar(50);default:'distributor'" json:"price_tier"` // 'distributor' or 'retail'
 	CreatedAt   time.Time `gorm:"autoCreateTime:milli" json:"created_at"`
 	UpdatedAt   time.Time `gorm:"autoCreateTime:milli;autoUpdateTime:milli" json:"updated_at"`
 }
 
-func (supplier *Supplier) BeforeCreate(_ *gorm.DB) error {
-	supplier.ID = uuid.New()
+func (customer *Customer) BeforeCreate(_ *gorm.DB) error {
+	customer.ID = uuid.New()
 	return nil
 }

@@ -72,13 +72,43 @@ type StockOpnameRequest struct {
 }
 
 type CreateSupplier struct {
-	Name  string `json:"name" validate:"required,min=2,max=100"`
-	Phone string `json:"phone" validate:"max=20"`
-	Email string `json:"email" validate:"omitempty,email,max=100"`
+	Name        string `json:"name" validate:"required,min=2,max=100"`
+	Phone       string `json:"phone" validate:"max=20"`
+	Email       string `json:"email" validate:"omitempty,email,max=100"`
+	PIC         string `json:"pic" validate:"max=100"`
+	Address     string `json:"address" validate:"max=500"`
+	NPWP        string `json:"npwp" validate:"max=50"`
+	PaymentTerm int    `json:"payment_term" validate:"min=0"`
 }
 
 type UpdateSupplier struct {
-	Name  string `json:"name" validate:"min=2,max=100"`
-	Phone string `json:"phone" validate:"max=20"`
-	Email string `json:"email" validate:"omitempty,email,max=100"`
+	Name        string `json:"name" validate:"omitempty,min=2,max=100"`
+	Phone       string `json:"phone" validate:"max=20"`
+	Email       string `json:"email" validate:"omitempty,email,max=100"`
+	PIC         string `json:"pic" validate:"max=100"`
+	Address     string `json:"address" validate:"max=500"`
+	NPWP        string `json:"npwp" validate:"max=50"`
+	PaymentTerm *int   `json:"payment_term" validate:"omitempty,min=0"`
+}
+
+type CreateCustomer struct {
+	Name        string `json:"name" validate:"required,min=2,max=100"`
+	Phone       string `json:"phone" validate:"max=20"`
+	Email       string `json:"email" validate:"omitempty,email,max=100"`
+	PIC         string `json:"pic" validate:"max=100"`
+	Address     string `json:"address" validate:"max=500"`
+	NPWP        string `json:"npwp" validate:"max=50"`
+	PaymentTerm int    `json:"payment_term" validate:"min=0"`
+	PriceTier   string `json:"price_tier" validate:"required,oneof=distributor retail"`
+}
+
+type UpdateCustomer struct {
+	Name        string `json:"name" validate:"omitempty,min=2,max=100"`
+	Phone       string `json:"phone" validate:"max=20"`
+	Email       string `json:"email" validate:"omitempty,email,max=100"`
+	PIC         string `json:"pic" validate:"max=100"`
+	Address     string `json:"address" validate:"max=500"`
+	NPWP        string `json:"npwp" validate:"max=50"`
+	PaymentTerm *int   `json:"payment_term" validate:"omitempty,min=0"`
+	PriceTier   string `json:"price_tier" validate:"omitempty,oneof=distributor retail"`
 }

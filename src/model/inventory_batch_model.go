@@ -20,6 +20,7 @@ type InventoryBatch struct {
 	Location      Location  `gorm:"foreignKey:LocationID;references:ID" json:"location"`
 	PurchasePrice float64   `gorm:"not null;default:0" json:"purchase_price"`
 	Status        string    `gorm:"not null;default:active;type:varchar(20)" json:"status"` // active, expired, quarantine
+	POID          *uuid.UUID `gorm:"type:uuid" json:"po_id"`
 	CreatedAt     time.Time `gorm:"autoCreateTime:milli" json:"created_at"`
 	UpdatedAt     time.Time `gorm:"autoCreateTime:milli;autoUpdateTime:milli" json:"updated_at"`
 }

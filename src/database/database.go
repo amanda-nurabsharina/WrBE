@@ -74,7 +74,11 @@ func Connect(dbHost, dbName string) *gorm.DB {
 	if err := db.AutoMigrate(
 		&model.User{}, &model.Token{}, &model.Role{},
 		&model.PackagingUnit{}, &model.Product{}, &model.Warehouse{}, &model.Location{},
-		&model.Supplier{}, &model.Customer{}, &model.InventoryBatch{}, &model.StockTransaction{},
+		&model.Supplier{}, &model.Customer{},
+		&model.PurchaseOrder{}, &model.PurchaseOrderItem{},
+		&model.SalesOrder{}, &model.SalesOrderItem{},
+		&model.InventoryBatch{}, &model.StockTransaction{},
+		&model.ActivityLog{},
 	); err != nil {
 		utils.Log.Errorf("Failed to auto-migrate tables: %v", err)
 	} else {
@@ -99,6 +103,7 @@ func seedDatabase(db *gorm.DB) {
 				DisplayName:     roleCfg.DisplayName,
 				Description:     roleCfg.Description,
 				AccessibleMenus: model.StringArray(roleCfg.AccessibleMenus),
+				Permissions:     model.PermissionMap(roleCfg.Permissions),
 				CreatedAt:       time.Now(),
 				UpdatedAt:       time.Now(),
 			}

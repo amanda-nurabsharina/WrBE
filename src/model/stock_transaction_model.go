@@ -16,6 +16,9 @@ type StockTransaction struct {
 	ReferenceNo     string         `gorm:"type:varchar(50)" json:"reference_no"`
 	UserID          uuid.UUID      `gorm:"not null" json:"user_id"`
 	User            User           `gorm:"foreignKey:UserID;references:ID" json:"user"`
+	POID            *uuid.UUID     `gorm:"type:uuid" json:"po_id"`
+	SOID            *uuid.UUID     `gorm:"type:uuid" json:"so_id"`
+	SellingPrice    float64        `gorm:"type:numeric(15,2);default:0" json:"selling_price"`
 	CreatedAt       time.Time      `gorm:"autoCreateTime:milli" json:"created_at"`
 }
 

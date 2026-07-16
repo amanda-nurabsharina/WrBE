@@ -56,13 +56,16 @@ type InwardRequest struct {
 	PurchasePrice float64 `json:"purchase_price" validate:"required,gt=0"`
 	WarehouseID   string  `json:"warehouse_id" validate:"required,uuid"`
 	LocationID    string  `json:"location_id" validate:"required,uuid"`
+	POID          string  `json:"po_id" validate:"omitempty,uuid"`
 }
 
 type OutwardRequest struct {
-	ProductID   string `json:"product_id" validate:"required,uuid"`
-	Qty         int    `json:"qty" validate:"required,gt=0"`
-	Purpose     string `json:"purpose" validate:"max=100"`
-	Description string `json:"description" validate:"max=255"`
+	ProductID    string  `json:"product_id" validate:"required,uuid"`
+	Qty          int     `json:"qty" validate:"required,gt=0"`
+	Purpose      string  `json:"purpose" validate:"max=100"`
+	Description  string  `json:"description" validate:"max=255"`
+	SOID         string  `json:"so_id" validate:"omitempty,uuid"`
+	SellingPrice float64 `json:"selling_price" validate:"omitempty,min=0"`
 }
 
 type StockOpnameRequest struct {
@@ -111,4 +114,30 @@ type UpdateCustomer struct {
 	NPWP        string `json:"npwp" validate:"max=50"`
 	PaymentTerm *int   `json:"payment_term" validate:"omitempty,min=0"`
 	PriceTier   string `json:"price_tier" validate:"omitempty,oneof=distributor retail"`
+}
+
+type PurchaseOrderItemReq struct {
+	ProductID string  `json:"product_id" validate:"required,uuid"`
+	Qty       int     `json:"qty" validate:"required,gt=0"`
+	Price     float64 `json:"price" validate:"required,min=0"`
+}
+
+type CreatePurchaseOrder struct {
+	SupplierID string                 `json:"supplier_id" validate:"required,uuid"`
+	PONumber   string                 `json:"po_number" validate:"required,min=3,max=50"`
+	OrderDate  string                 `json:"order_date" validate:"required"` // Format: YYYY-MM-DD
+	Items      []PurchaseOrderItemReq `json:"items" validate:"required,min=1,dive"`
+}
+
+type SalesOrderItemReq struct {
+	ProductID string  `json:"product_id" validate:"required,uuid"`
+	Qty       int     `json:"qty" validate:"required,gt=0"`
+	Price     float64 `json:"price" validate:"required,min=0"`
+}
+
+type CreateSalesOrder struct {
+	CustomerID string              `json:"customer_id" validate:"required,uuid"`
+	SONumber   string              `json:"so_number" validate:"required,min=3,max=50"`
+	OrderDate  string              `json:"order_date" validate:"required"` // Format: YYYY-MM-DD
+	Items      []SalesOrderItemReq `json:"items" validate:"required,min=1,dive"`
 }

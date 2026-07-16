@@ -111,3 +111,19 @@ func (ctrl *TransactionController) CreateStockOpname(c *fiber.Ctx) error {
 			Data:    tx,
 		})
 }
+
+func (ctrl *TransactionController) ApproveB3Inward(c *fiber.Ctx) error {
+	id := c.Params("id")
+	batch, err := ctrl.TxService.ApproveB3Inward(c, id)
+	if err != nil {
+		return err
+	}
+
+	return c.Status(fiber.StatusOK).
+		JSON(response.SuccessWithData[*model.InventoryBatch]{
+			Code:    fiber.StatusOK,
+			Status:  "success",
+			Message: "B3 quarantined batch approved successfully",
+			Data:    batch,
+		})
+}

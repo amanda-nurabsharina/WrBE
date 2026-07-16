@@ -38,6 +38,14 @@ func IMSRoutes(
 	custService := service.NewCustomerService(db, validate)
 	custController := controller.NewCustomerController(custService)
 
+	// Initialize Order service & controller directly inside IMSRoutes
+	orderService := service.NewOrderService(db, validate)
+	orderController := controller.NewOrderController(orderService)
+
+	// Initialize Activity service & controller
+	activityService := service.NewActivityService(db)
+	activityController := controller.NewActivityController(activityService)
+
 	// Authorization middleware check helper
 	auth := m.Auth(u)
 
@@ -90,9 +98,25 @@ func IMSRoutes(
 	// Expiry Alerts
 	v1.Get("/inventory/expiry-alerts", auth, batchController.GetExpiryAlerts)
 
+	// B3 Inward Batch Approval
+	v1.Put("/inventory/batches/:id/approve", auth, txController.ApproveB3Inward)
+
+	// Purchase Orders
+	v1.Get("/orders/po", auth, orderController.GetPurchaseOrders)
+	v1.Post("/orders/po", auth, orderController.CreatePurchaseOrder)
+	v1.Put("/orders/po/:id/approve", auth, orderController.ApprovePurchaseOrder)
+
+	// Sales Orders
+	v1.Get("/orders/so", auth, orderController.GetSalesOrders)
+	v1.Post("/orders/so", auth, orderController.CreateSalesOrder)
+	v1.Put("/orders/so/:id/approve", auth, orderController.ApproveSalesOrder)
+
 	// Stock Opname
 	v1.Post("/stock-opname", auth, txController.CreateStockOpname)
 	v1.Get("/inventory/adjustment", auth, txController.GetTransactions)
+
+	// Activity Log (Audit Trail)
+	v1.Get("/activity-logs", auth, activityController.GetActivityLogs)
 
 	// Dashboard
 	v1.Get("/dashboard", auth, dashController.GetDashboardData)

@@ -90,6 +90,8 @@ func (s *customerService) CreateCustomer(c *fiber.Ctx, req *validation.CreateCus
 		return nil, fiber.NewError(fiber.StatusInternalServerError, "Database error")
 	}
 
+	LogCtxActivity(s.DB, c, "CREATE", "customers", customer.ID.String(), "Created customer: "+customer.Name)
+
 	return &customer, nil
 }
 
@@ -123,6 +125,8 @@ func (s *customerService) UpdateCustomer(c *fiber.Ctx, id string, req *validatio
 		return nil, fiber.NewError(fiber.StatusInternalServerError, "Database error")
 	}
 
+	LogCtxActivity(s.DB, c, "UPDATE", "customers", customer.ID.String(), "Updated customer: "+customer.Name)
+
 	return customer, nil
 }
 
@@ -136,6 +140,8 @@ func (s *customerService) DeleteCustomer(c *fiber.Ctx, id string) error {
 		s.Log.Errorf("Failed to delete customer: %v", err)
 		return fiber.NewError(fiber.StatusInternalServerError, "Database error")
 	}
+
+	LogCtxActivity(s.DB, c, "DELETE", "customers", customer.ID.String(), "Deleted customer: "+customer.Name)
 
 	return nil
 }

@@ -144,6 +144,8 @@ func (s *productService) CreateProduct(c *fiber.Ctx, req *validation.CreateProdu
 	// Preload the PackagingUnit relation
 	s.DB.WithContext(c.Context()).Preload("PackagingUnit").First(&product, "id = ?", product.ID)
 
+	LogCtxActivity(s.DB, c, "CREATE", "products", product.ID.String(), "Created product: "+product.Name+" ("+product.Code+")")
+
 	return &product, nil
 }
 
@@ -212,6 +214,8 @@ func (s *productService) UpdateProduct(c *fiber.Ctx, id string, req *validation.
 	// Preload the PackagingUnit relation
 	s.DB.WithContext(c.Context()).Preload("PackagingUnit").First(product, "id = ?", product.ID)
 
+	LogCtxActivity(s.DB, c, "UPDATE", "products", product.ID.String(), "Updated product: "+product.Name+" ("+product.Code+")")
+
 	return product, nil
 }
 
@@ -232,6 +236,8 @@ func (s *productService) DeleteProduct(c *fiber.Ctx, id string) error {
 		s.Log.Errorf("Failed to delete product: %v", err)
 		return fiber.NewError(fiber.StatusInternalServerError, "Database error")
 	}
+
+	LogCtxActivity(s.DB, c, "DELETE", "products", product.ID.String(), "Deleted product: "+product.Name+" ("+product.Code+")")
 
 	return nil
 }

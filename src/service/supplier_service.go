@@ -89,6 +89,8 @@ func (s *supplierService) CreateSupplier(c *fiber.Ctx, req *validation.CreateSup
 		return nil, fiber.NewError(fiber.StatusInternalServerError, "Database error")
 	}
 
+	LogCtxActivity(s.DB, c, "CREATE", "suppliers", supplier.ID.String(), "Created supplier: "+supplier.Name)
+
 	return &supplier, nil
 }
 
@@ -119,6 +121,8 @@ func (s *supplierService) UpdateSupplier(c *fiber.Ctx, id string, req *validatio
 		return nil, fiber.NewError(fiber.StatusInternalServerError, "Database error")
 	}
 
+	LogCtxActivity(s.DB, c, "UPDATE", "suppliers", supplier.ID.String(), "Updated supplier: "+supplier.Name)
+
 	return supplier, nil
 }
 
@@ -132,6 +136,8 @@ func (s *supplierService) DeleteSupplier(c *fiber.Ctx, id string) error {
 		s.Log.Errorf("Failed to delete supplier: %v", err)
 		return fiber.NewError(fiber.StatusInternalServerError, "Database error")
 	}
+
+	LogCtxActivity(s.DB, c, "DELETE", "suppliers", supplier.ID.String(), "Deleted supplier: "+supplier.Name)
 
 	return nil
 }

@@ -4,6 +4,7 @@ import (
 	"app/src/config"
 	"app/src/model"
 	"app/src/utils"
+	"errors"
 	"fmt"
 	"time"
 
@@ -92,25 +93,49 @@ func Connect(dbHost, dbName string) *gorm.DB {
 }
 
 func seedDatabase(db *gorm.DB) {
-	// 1. Seed Roles
+	// 1. Seed/Update Roles
 	utils.Log.Info("Seeding roles...")
 	for _, roleCfg := range config.DefaultRoles {
-		var count int64
-		db.Model(&model.Role{}).Where("name = ?", roleCfg.Name).Count(&count)
-		if count == 0 {
-			newRole := model.Role{
-				Name:            roleCfg.Name,
-				DisplayName:     roleCfg.DisplayName,
-				Description:     roleCfg.Description,
-				AccessibleMenus: model.StringArray(roleCfg.AccessibleMenus),
-				Permissions:     model.PermissionMap(roleCfg.Permissions),
-				CreatedAt:       time.Now(),
-				UpdatedAt:       time.Now(),
-			}
-			if err := db.Create(&newRole).Error; err != nil {
-				utils.Log.Errorf("Failed to seed role %s: %v", roleCfg.Name, err)
+		var existing model.Role
+		err := db.Where("name = ?", roleCfg.Name).First(&existing).Error
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				newRole := model.Role{
+					Name:            roleCfg.Name,
+					DisplayName:     roleCfg.DisplayName,
+					Description:     roleCfg.Description,
+					AccessibleMenus: model.StringArray(roleCfg.AccessibleMenus),
+					Permissions:     model.PermissionMap(roleCfg.Permissions),
+					CreatedAt:       time.Now(),
+					UpdatedAt:       time.Now(),
+				}
+				if err := db.Create(&newRole).Error; err != nil {
+					utils.Log.Errorf("Failed to seed role %s: %v", roleCfg.Name, err)
+				} else {
+					utils.Log.Infof("Seeded role: %s", roleCfg.Name)
+				}
 			} else {
-				utils.Log.Infof("Seeded role: %s", roleCfg.Name)
+				utils.Log.Errorf("Error checking role %s: %v", roleCfg.Name, err)
+			}
+		} else {
+			// Update permissions and accessible menus if they are empty/null or out of sync
+			needsUpdate := false
+			if len(existing.Permissions) == 0 && len(roleCfg.Permissions) > 0 {
+				existing.Permissions = model.PermissionMap(roleCfg.Permissions)
+				needsUpdate = true
+			}
+			// Update accessible menus if they are shorter or mismatch
+			if len(existing.AccessibleMenus) < len(roleCfg.AccessibleMenus) {
+				existing.AccessibleMenus = model.StringArray(roleCfg.AccessibleMenus)
+				needsUpdate = true
+			}
+			if needsUpdate {
+				existing.UpdatedAt = time.Now()
+				if err := db.Save(&existing).Error; err != nil {
+					utils.Log.Errorf("Failed to update role %s: %v", roleCfg.Name, err)
+				} else {
+					utils.Log.Infof("Updated existing role: %s with new permissions/menus", roleCfg.Name)
+				}
 			}
 		}
 	}

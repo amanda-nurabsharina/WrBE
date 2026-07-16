@@ -49,13 +49,24 @@ func Auth(userService service.UserService, requiredRights ...string) fiber.Handl
 
 			if errDb == nil {
 				json.Unmarshal(accessibleMenusJSON, &userRights)
-			} else {
-				// Fallback to config RoleRights
-				var hasRights bool
-				userRights, hasRights = config.RoleRights[user.Role]
-				if !hasRights {
-					return fiber.NewError(fiber.StatusForbidden, "You don't have permission to access this resource")
+			}
+
+			// Always merge static configuration rights if they exist
+			if staticRights, ok := config.RoleRights[user.Role]; ok {
+				existingRights := make(map[string]bool)
+				for _, r := range userRights {
+					existingRights[r] = true
 				}
+				for _, r := range staticRights {
+					if !existingRights[r] {
+						userRights = append(userRights, r)
+						existingRights[r] = true
+					}
+				}
+			}
+
+			if len(userRights) == 0 {
+				return fiber.NewError(fiber.StatusForbidden, "You don't have permission to access this resource")
 			}
 
 			if !hasAllRights(userRights, requiredRights) && c.Params("userId") != userID {

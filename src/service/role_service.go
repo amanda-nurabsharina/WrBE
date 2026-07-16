@@ -18,8 +18,8 @@ type RoleService interface {
 	ListRoles(c *fiber.Ctx) ([]model.Role, error)
 	GetRoleByID(c *fiber.Ctx, id string) (*model.Role, error)
 	GetRoleByName(c *fiber.Ctx, name string) (*model.Role, error)
-	CreateRole(c *fiber.Ctx, name, displayName, description string, accessibleMenus []string) (*model.Role, error)
-	UpdateRole(c *fiber.Ctx, id string, displayName, description string, accessibleMenus []string) (*model.Role, error)
+	CreateRole(c *fiber.Ctx, name, displayName, description string, accessibleMenus []string, permissions map[string][]string) (*model.Role, error)
+	UpdateRole(c *fiber.Ctx, id string, displayName, description string, accessibleMenus []string, permissions map[string][]string) (*model.Role, error)
 	DeleteRole(c *fiber.Ctx, id string) error
 }
 
@@ -75,7 +75,7 @@ func (s *roleService) GetRoleByName(c *fiber.Ctx, name string) (*model.Role, err
 	return &role, nil
 }
 
-func (s *roleService) CreateRole(c *fiber.Ctx, name, displayName, description string, accessibleMenus []string) (*model.Role, error) {
+func (s *roleService) CreateRole(c *fiber.Ctx, name, displayName, description string, accessibleMenus []string, permissions map[string][]string) (*model.Role, error) {
 	existing, err := s.GetRoleByName(c, name)
 	if err != nil {
 		return nil, err
@@ -90,6 +90,7 @@ func (s *roleService) CreateRole(c *fiber.Ctx, name, displayName, description st
 		DisplayName:     displayName,
 		Description:     description,
 		AccessibleMenus: model.StringArray(accessibleMenus),
+		Permissions:     model.PermissionMap(permissions),
 		CreatedAt:       time.Now(),
 		UpdatedAt:       time.Now(),
 	}
@@ -102,7 +103,7 @@ func (s *roleService) CreateRole(c *fiber.Ctx, name, displayName, description st
 	return &role, nil
 }
 
-func (s *roleService) UpdateRole(c *fiber.Ctx, id string, displayName, description string, accessibleMenus []string) (*model.Role, error) {
+func (s *roleService) UpdateRole(c *fiber.Ctx, id string, displayName, description string, accessibleMenus []string, permissions map[string][]string) (*model.Role, error) {
 	role, err := s.GetRoleByID(c, id)
 	if err != nil {
 		return nil, err
@@ -111,6 +112,7 @@ func (s *roleService) UpdateRole(c *fiber.Ctx, id string, displayName, descripti
 	role.DisplayName = displayName
 	role.Description = description
 	role.AccessibleMenus = model.StringArray(accessibleMenus)
+	role.Permissions = model.PermissionMap(permissions)
 	role.UpdatedAt = time.Now()
 
 	if err := s.DB.WithContext(c.Context()).Save(role).Error; err != nil {

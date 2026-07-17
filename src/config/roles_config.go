@@ -34,7 +34,7 @@ var DefaultRoles = []RoleConfig{
 		AccessibleMenus: []string{
 			"dashboard", "employee", "leave", "attendance", "payroll", "settings", "roles",
 			"products", "suppliers", "customers", "purchase-orders", "sales-orders", "packaging",
-			"inward", "outward", "expired", "opname", "approver", "activity-log",
+			"inward", "outward", "expired", "opname", "approver", "activity-log", "reporting",
 		},
 		Permissions: map[string][]string{
 			"dashboard":       viewOnly,
@@ -50,6 +50,7 @@ var DefaultRoles = []RoleConfig{
 			"opname":          allActions,
 			"approver":        allActions,
 			"activity-log":    viewOnly,
+			"reporting":       viewOnly,
 		},
 	},
 	{
@@ -59,7 +60,7 @@ var DefaultRoles = []RoleConfig{
 		AccessibleMenus: []string{
 			"dashboard", "employee", "leave", "attendance", "payroll", "settings",
 			"products", "suppliers", "customers", "purchase-orders", "sales-orders", "packaging",
-			"inward", "outward", "expired", "opname", "activity-log",
+			"inward", "outward", "expired", "opname", "activity-log", "reporting",
 		},
 		Permissions: map[string][]string{
 			"dashboard":       viewOnly,
@@ -74,6 +75,7 @@ var DefaultRoles = []RoleConfig{
 			"expired":         crudActions,
 			"opname":          crudActions,
 			"activity-log":    viewOnly,
+			"reporting":       viewOnly,
 		},
 	},
 	{

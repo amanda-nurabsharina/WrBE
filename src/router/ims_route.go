@@ -46,6 +46,10 @@ func IMSRoutes(
 	activityService := service.NewActivityService(db)
 	activityController := controller.NewActivityController(activityService)
 
+	// Initialize Report service & controller directly inside IMSRoutes
+	repService := service.NewReportService(db)
+	repController := controller.NewReportController(repService)
+
 	// Authorization middleware check helper
 	auth := m.Auth(u)
 
@@ -120,6 +124,14 @@ func IMSRoutes(
 
 	// Dashboard
 	v1.Get("/dashboard", auth, dashController.GetDashboardData)
+
+	// Reports
+	reports := v1.Group("/reports", auth)
+	reports.Get("/inventory-value", repController.GetInventoryValueReport)
+	reports.Get("/stock-aging", repController.GetStockAgingReport)
+	reports.Get("/stock-mutation", repController.GetStockMutationReport)
+	reports.Get("/distribution", repController.GetDistributionReport)
+	reports.Get("/reorder-point", repController.GetReorderPointReport)
 
 	// Metadata Dropdowns
 	v1.Get("/warehouses", auth, metaController.GetWarehouses)

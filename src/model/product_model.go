@@ -25,6 +25,9 @@ type Product struct {
 	PurchasePrice    float64       `gorm:"type:numeric(15,2);default:0" json:"purchase_price"`
 	PriceDistributor float64       `gorm:"type:numeric(15,2);default:0" json:"price_distributor"`
 	PriceRetail      float64       `gorm:"type:numeric(15,2);default:0" json:"price_retail"`
+	StorageTemp         string        `gorm:"type:varchar(50)" json:"storage_temp"`
+	StorageHumidity     string        `gorm:"type:varchar(50)" json:"storage_humidity"`
+	StorageRestrictions string        `gorm:"type:text" json:"storage_restrictions"`
 	Stock            int           `gorm:"-" json:"stock"`
 	CreatedAt        time.Time     `gorm:"autoCreateTime:milli" json:"created_at"`
 	UpdatedAt        time.Time     `gorm:"autoCreateTime:milli;autoUpdateTime:milli" json:"updated_at"`

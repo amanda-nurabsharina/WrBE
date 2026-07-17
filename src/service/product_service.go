@@ -5,6 +5,7 @@ import (
 	"app/src/utils"
 	"app/src/validation"
 	"errors"
+	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
@@ -56,6 +57,7 @@ func (s *productService) GetProducts(c *fiber.Ctx, search string) ([]model.Produ
 	var stocks []ProductStock
 	if len(products) > 0 {
 		if err := s.DB.WithContext(c.Context()).Model(&model.InventoryBatch{}).
+			Where("status = 'active'").
 			Select("product_id, SUM(qty) as total_qty").
 			Group("product_id").
 			Scan(&stocks).Error; err != nil {
@@ -93,7 +95,7 @@ func (s *productService) GetProductByID(c *fiber.Ctx, id string) (*model.Product
 	// Fetch stock
 	var totalStock int
 	s.DB.WithContext(c.Context()).Model(&model.InventoryBatch{}).
-		Where("product_id = ?", product.ID).
+		Where("product_id = ? AND status = 'active'", product.ID).
 		Select("COALESCE(SUM(qty), 0)").
 		Scan(&totalStock)
 	product.Stock = totalStock
@@ -134,11 +136,65 @@ func (s *productService) CreateProduct(c *fiber.Ctx, req *validation.CreateProdu
 		PurchasePrice:    req.PurchasePrice,
 		PriceDistributor: req.PriceDistributor,
 		PriceRetail:      req.PriceRetail,
+		StorageTemp:         req.StorageTemp,
+		StorageHumidity:     req.StorageHumidity,
+		StorageRestrictions: req.StorageRestrictions,
 	}
 
 	if err := s.DB.WithContext(c.Context()).Create(&product).Error; err != nil {
 		s.Log.Errorf("Failed to create product: %v", err)
 		return nil, fiber.NewError(fiber.StatusInternalServerError, "Database error")
+	}
+
+	if req.InitialBatchNo != "" {
+		warehouseUUID, err := uuid.Parse(req.InitialWarehouseID)
+		if err == nil {
+			var loc model.Location
+			s.DB.WithContext(c.Context()).Where("warehouse_id = ?", warehouseUUID).First(&loc)
+			if loc.ID == uuid.Nil {
+				loc = model.Location{
+					WarehouseID: warehouseUUID,
+					Rack:        "Rack-A1",
+				}
+				s.DB.WithContext(c.Context()).Create(&loc)
+			}
+
+			parsedExpDate, errDate := time.Parse("2006-01-02", req.InitialExpiryDate)
+			if errDate != nil || parsedExpDate.IsZero() {
+				parsedExpDate = time.Now().AddDate(2, 0, 0)
+			}
+
+			batch := model.InventoryBatch{
+				ProductID:     product.ID,
+				BatchNumber:   req.InitialBatchNo,
+				ExpiredDate:   parsedExpDate,
+				Qty:           req.InitialQty,
+				WarehouseID:   warehouseUUID,
+				LocationID:    loc.ID,
+				PurchasePrice: req.PurchasePrice,
+				Status:        "active",
+			}
+			if errBatch := s.DB.WithContext(c.Context()).Create(&batch).Error; errBatch == nil {
+				var userID uuid.UUID
+				userObj := c.Locals("user")
+				if user, ok := userObj.(*model.User); ok && user != nil {
+					userID = user.ID
+				} else {
+					var firstUser model.User
+					s.DB.WithContext(c.Context()).First(&firstUser)
+					userID = firstUser.ID
+				}
+
+				tx := model.StockTransaction{
+					BatchID:         batch.ID,
+					TransactionType: "IN",
+					Qty:             req.InitialQty,
+					ReferenceNo:     "INITIAL_STOCK",
+					UserID:          userID,
+				}
+				s.DB.WithContext(c.Context()).Create(&tx)
+			}
+		}
 	}
 
 	// Preload the PackagingUnit relation
@@ -204,6 +260,15 @@ func (s *productService) UpdateProduct(c *fiber.Ctx, id string, req *validation.
 	}
 	if req.PriceRetail != nil {
 		product.PriceRetail = *req.PriceRetail
+	}
+	if req.StorageTemp != "" {
+		product.StorageTemp = req.StorageTemp
+	}
+	if req.StorageHumidity != "" {
+		product.StorageHumidity = req.StorageHumidity
+	}
+	if req.StorageRestrictions != "" {
+		product.StorageRestrictions = req.StorageRestrictions
 	}
 
 	if err := s.DB.WithContext(c.Context()).Save(product).Error; err != nil {

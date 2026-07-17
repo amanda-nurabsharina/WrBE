@@ -16,6 +16,14 @@ type CreateProduct struct {
 	PurchasePrice    float64 `json:"purchase_price" validate:"min=0"`
 	PriceDistributor float64 `json:"price_distributor" validate:"min=0"`
 	PriceRetail      float64 `json:"price_retail" validate:"min=0"`
+	StorageTemp         string  `json:"storage_temp"`
+	StorageHumidity     string  `json:"storage_humidity"`
+	StorageRestrictions string  `json:"storage_restrictions"`
+	// Optional Initial Batch Details
+	InitialBatchNo      string  `json:"initial_batch_no"`
+	InitialQty          int     `json:"initial_qty"`
+	InitialExpiryDate   string  `json:"initial_expiry_date"`
+	InitialWarehouseID  string  `json:"initial_warehouse_id"`
 }
 
 type UpdateProduct struct {
@@ -33,6 +41,9 @@ type UpdateProduct struct {
 	PurchasePrice    *float64 `json:"purchase_price" validate:"omitempty,min=0"`
 	PriceDistributor *float64 `json:"price_distributor" validate:"omitempty,min=0"`
 	PriceRetail      *float64 `json:"price_retail" validate:"omitempty,min=0"`
+	StorageTemp         string   `json:"storage_temp"`
+	StorageHumidity     string   `json:"storage_humidity"`
+	StorageRestrictions string   `json:"storage_restrictions"`
 }
 
 type CreatePackagingUnit struct {

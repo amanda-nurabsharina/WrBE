@@ -173,34 +173,30 @@ func seedDatabase(db *gorm.DB) {
 		}
 	}
 
-	// 3. Seed legacy admin if no user exists at all
-	var userCount int64
-	db.Model(&model.User{}).Count(&userCount)
-	if userCount == 0 || userCount == 1 { // if only super_admin exists or 0 users
-		var legacyCount int64
-		db.Model(&model.User{}).Where("email = ?", "admin@warehouse.com").Count(&legacyCount)
-		if legacyCount == 0 {
-			utils.Log.Info("Seeding database with legacy admin user...")
-			hashedPassword, err := utils.HashPassword("admin123")
-			if err != nil {
-				utils.Log.Errorf("Failed to hash admin password for seeding: %v", err)
-				return
-			}
-			admin := model.User{
-				Name:          "System Admin",
-				Email:         "admin@warehouse.com",
-				Password:      hashedPassword,
-				Role:          "admin",
-				Department:    "IT & Security",
-				Position:      "System Administrator",
-				Status:        "active",
-				VerifiedEmail: true,
-			}
-			if err := db.Create(&admin).Error; err != nil {
-				utils.Log.Errorf("Failed to seed admin user: %v", err)
-			} else {
-				utils.Log.Info("Successfully seeded legacy admin user: admin@warehouse.com / admin123")
-			}
+	// 3. Seed legacy admin if missing
+	var legacyCount int64
+	db.Model(&model.User{}).Where("email = ?", "admin@warehouse.com").Count(&legacyCount)
+	if legacyCount == 0 {
+		utils.Log.Info("Seeding database with legacy admin user...")
+		hashedPassword, err := utils.HashPassword("admin123")
+		if err != nil {
+			utils.Log.Errorf("Failed to hash admin password for seeding: %v", err)
+			return
+		}
+		admin := model.User{
+			Name:          "System Admin",
+			Email:         "admin@warehouse.com",
+			Password:      hashedPassword,
+			Role:          "admin",
+			Department:    "IT & Security",
+			Position:      "System Administrator",
+			Status:        "active",
+			VerifiedEmail: true,
+		}
+		if err := db.Create(&admin).Error; err != nil {
+			utils.Log.Errorf("Failed to seed admin user: %v", err)
+		} else {
+			utils.Log.Info("Successfully seeded legacy admin user: admin@warehouse.com / admin123")
 		}
 	}
 

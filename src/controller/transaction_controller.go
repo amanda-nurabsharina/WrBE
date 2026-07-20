@@ -127,3 +127,46 @@ func (ctrl *TransactionController) ApproveB3Inward(c *fiber.Ctx) error {
 			Data:    batch,
 		})
 }
+
+func (ctrl *TransactionController) UpdateTransaction(c *fiber.Ctx) error {
+	id := c.Params("id")
+	req := new(validation.UpdateTransactionRequest)
+	if err := c.BodyParser(req); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "Invalid request body")
+	}
+
+	tx, err := ctrl.TxService.UpdateTransaction(c, id, req)
+	if err != nil {
+		return err
+	}
+
+	return c.Status(fiber.StatusOK).
+		JSON(response.SuccessWithData[*model.StockTransaction]{
+			Code:    fiber.StatusOK,
+			Status:  "success",
+			Message: "Transaction updated successfully",
+			Data:    tx,
+		})
+}
+
+func (ctrl *TransactionController) CompleteTransaction(c *fiber.Ctx) error {
+	id := c.Params("id")
+	type CompleteReq struct {
+		ProofDocument string `json:"proof_document"`
+	}
+	req := new(CompleteReq)
+	c.BodyParser(req)
+
+	tx, err := ctrl.TxService.CompleteTransaction(c, id, req.ProofDocument)
+	if err != nil {
+		return err
+	}
+
+	return c.Status(fiber.StatusOK).
+		JSON(response.SuccessWithData[*model.StockTransaction]{
+			Code:    fiber.StatusOK,
+			Status:  "success",
+			Message: "Transaction finalized successfully",
+			Data:    tx,
+		})
+}

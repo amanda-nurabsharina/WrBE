@@ -24,6 +24,7 @@ type OrderService interface {
 	GetSalesOrders(c *fiber.Ctx, search string) ([]model.SalesOrder, error)
 	CreateSalesOrder(c *fiber.Ctx, req *validation.CreateSalesOrder) (*model.SalesOrder, error)
 	ApproveSalesOrder(c *fiber.Ctx, id string) (*model.SalesOrder, error)
+	UpdateSalesOrderPaymentStatus(c *fiber.Ctx, id string, req *validation.UpdateSalesOrderPaymentRequest) (*model.SalesOrder, error)
 }
 
 type orderService struct {
@@ -90,6 +91,7 @@ func (s *orderService) CreatePurchaseOrder(c *fiber.Ctx, req *validation.CreateP
 			Qty:         it.Qty,
 			ReceivedQty: 0,
 			Price:       it.Price,
+			Unit:        it.Unit,
 		})
 	}
 
@@ -306,6 +308,36 @@ func (s *orderService) ApproveSalesOrder(c *fiber.Ctx, id string) (*model.SalesO
 	s.DB.WithContext(c.Context()).Preload("Customer").Preload("Items.Product").First(&so, so.ID)
 
 	LogCtxActivity(s.DB, c, "APPROVE", "sales-orders", so.ID.String(), "Approved SO: "+so.SONumber)
+
+	return &so, nil
+}
+
+func (s *orderService) UpdateSalesOrderPaymentStatus(c *fiber.Ctx, id string, req *validation.UpdateSalesOrderPaymentRequest) (*model.SalesOrder, error) {
+	if err := s.Validate.Struct(req); err != nil {
+		return nil, err
+	}
+
+	uid, err := uuid.Parse(id)
+	if err != nil {
+		return nil, fiber.NewError(fiber.StatusBadRequest, "Invalid UUID")
+	}
+
+	var so model.SalesOrder
+	if err := s.DB.WithContext(c.Context()).First(&so, "id = ?", uid).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fiber.NewError(fiber.StatusNotFound, "SO not found")
+		}
+		return nil, fiber.NewError(fiber.StatusInternalServerError, "Database error")
+	}
+
+	so.PaymentStatus = req.PaymentStatus
+	if err := s.DB.WithContext(c.Context()).Save(&so).Error; err != nil {
+		return nil, fiber.NewError(fiber.StatusInternalServerError, "Failed to update payment status")
+	}
+
+	s.DB.WithContext(c.Context()).Preload("Customer").Preload("Items.Product").First(&so, so.ID)
+
+	LogCtxActivity(s.DB, c, "UPDATE", "sales-orders", so.ID.String(), "Updated payment status to "+req.PaymentStatus+" for SO: "+so.SONumber)
 
 	return &so, nil
 }

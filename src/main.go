@@ -60,6 +60,13 @@ func setupFiberApp() *fiber.App {
 	app.Use(helmet.New())
 	app.Use(compress.New())
 	app.Use(middleware.RecoverConfig())
+	app.Static("/uploads", "./uploads", fiber.Static{
+		ModifyResponse: func(c *fiber.Ctx) error {
+			c.Set("Access-Control-Allow-Origin", "*")
+			c.Set("Cross-Origin-Resource-Policy", "cross-origin")
+			return nil
+		},
+	})
 
 	return app
 }

@@ -19,6 +19,12 @@ type StockTransaction struct {
 	POID            *uuid.UUID     `gorm:"type:uuid" json:"po_id"`
 	SOID            *uuid.UUID     `gorm:"type:uuid" json:"so_id"`
 	SellingPrice    float64        `gorm:"type:numeric(15,2);default:0" json:"selling_price"`
+	Destination     string         `gorm:"type:varchar(100);default:''" json:"destination"`
+	Description     string         `gorm:"type:varchar(255);default:''" json:"description"`
+	SupplierID      *uuid.UUID     `gorm:"type:uuid" json:"supplier_id"`
+	Supplier        *Supplier      `gorm:"foreignKey:SupplierID;references:ID" json:"supplier"`
+	ProofDocument   string         `gorm:"type:text;default:''" json:"proof_document"`
+	Status          string         `gorm:"type:varchar(20);default:'completed'" json:"status"` // draft, completed
 	CreatedAt       time.Time      `gorm:"autoCreateTime:milli" json:"created_at"`
 }
 

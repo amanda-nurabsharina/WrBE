@@ -13,7 +13,7 @@ func RoleRoutes(v1 fiber.Router, roleService service.RoleService, userService se
 
 	roles := v1.Group("/admin/roles")
 
-	roles.Get("/", m.Auth(userService, "manageRoles"), roleController.ListRoles)
+	roles.Get("/", m.Auth(userService), roleController.ListRoles)
 	roles.Post("/", m.Auth(userService, "manageRoles"), roleController.CreateRole)
 	roles.Get("/:id", m.Auth(userService, "manageRoles"), roleController.GetRoleByID)
 	roles.Put("/:id", m.Auth(userService, "manageRoles"), roleController.UpdateRole)

@@ -8,15 +8,16 @@ import (
 )
 
 type SalesOrder struct {
-	ID         uuid.UUID        `gorm:"primaryKey;not null" json:"id"`
-	SONumber   string           `gorm:"uniqueIndex;not null;type:varchar(50)" json:"so_number"`
-	CustomerID uuid.UUID        `gorm:"not null" json:"customer_id"`
-	Customer   Customer         `gorm:"foreignKey:CustomerID;references:ID" json:"customer"`
-	OrderDate  time.Time        `gorm:"not null;type:date" json:"order_date"`
-	Status     string           `gorm:"not null;default:draft;type:varchar(30)" json:"status"` // draft, pending_b3_approval, approved, partially_shipped, shipped
-	Items      []SalesOrderItem `gorm:"foreignKey:SOID;constraint:OnDelete:CASCADE" json:"items"`
-	CreatedAt  time.Time        `gorm:"autoCreateTime:milli" json:"created_at"`
-	UpdatedAt  time.Time        `gorm:"autoCreateTime:milli;autoUpdateTime:milli" json:"updated_at"`
+	ID            uuid.UUID        `gorm:"primaryKey;not null" json:"id"`
+	SONumber      string           `gorm:"uniqueIndex;not null;type:varchar(50)" json:"so_number"`
+	CustomerID    uuid.UUID        `gorm:"not null" json:"customer_id"`
+	Customer      Customer         `gorm:"foreignKey:CustomerID;references:ID" json:"customer"`
+	OrderDate     time.Time        `gorm:"not null;type:date" json:"order_date"`
+	Status        string           `gorm:"not null;default:draft;type:varchar(30)" json:"status"` // draft, pending_b3_approval, approved, partially_shipped, shipped
+	PaymentStatus string           `gorm:"not null;default:unpaid;type:varchar(30)" json:"payment_status"` // unpaid, partially_paid, paid
+	Items         []SalesOrderItem `gorm:"foreignKey:SOID;constraint:OnDelete:CASCADE" json:"items"`
+	CreatedAt     time.Time        `gorm:"autoCreateTime:milli" json:"created_at"`
+	UpdatedAt     time.Time        `gorm:"autoCreateTime:milli;autoUpdateTime:milli" json:"updated_at"`
 }
 
 type SalesOrderItem struct {

@@ -65,10 +65,6 @@ func Auth(userService service.UserService, requiredRights ...string) fiber.Handl
 				}
 			}
 
-			if len(userRights) == 0 {
-				return fiber.NewError(fiber.StatusForbidden, "You don't have permission to access this resource")
-			}
-
 			if !hasAllRights(userRights, requiredRights) && c.Params("userId") != userID {
 				return fiber.NewError(fiber.StatusForbidden, "You don't have permission to access this resource")
 			}

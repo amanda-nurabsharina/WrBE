@@ -130,3 +130,24 @@ func (ctrl *OrderController) ApproveSalesOrder(c *fiber.Ctx) error {
 			Data:    so,
 		})
 }
+
+func (ctrl *OrderController) UpdateSalesOrderPaymentStatus(c *fiber.Ctx) error {
+	id := c.Params("id")
+	req := new(validation.UpdateSalesOrderPaymentRequest)
+	if err := c.BodyParser(req); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "Invalid request body")
+	}
+
+	so, err := ctrl.OrderService.UpdateSalesOrderPaymentStatus(c, id, req)
+	if err != nil {
+		return err
+	}
+
+	return c.Status(fiber.StatusOK).
+		JSON(response.SuccessWithData[*model.SalesOrder]{
+			Code:    fiber.StatusOK,
+			Status:  "success",
+			Message: "Sales order payment status updated successfully",
+			Data:    so,
+		})
+}

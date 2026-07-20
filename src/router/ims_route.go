@@ -24,6 +24,7 @@ func IMSRoutes(
 	txController := controller.NewTransactionController(txService)
 	dashController := controller.NewDashboardController(dashService)
 	metaController := controller.NewMetaController(db)
+	uploadController := controller.NewUploadController()
 
 	// Initialize Supplier service & controller directly inside IMSRoutes
 	validate := validation.Validator()
@@ -114,6 +115,14 @@ func IMSRoutes(
 	v1.Get("/orders/so", auth, orderController.GetSalesOrders)
 	v1.Post("/orders/so", auth, orderController.CreateSalesOrder)
 	v1.Put("/orders/so/:id/approve", auth, orderController.ApproveSalesOrder)
+	v1.Patch("/orders/so/:id/payment", auth, orderController.UpdateSalesOrderPaymentStatus)
+
+	// File Upload
+	v1.Post("/upload", auth, uploadController.UploadFile)
+
+	// Transaction Edit / Completion
+	v1.Put("/inventory/transactions/:id", auth, txController.UpdateTransaction)
+	v1.Put("/inventory/transactions/:id/complete", auth, txController.CompleteTransaction)
 
 	// Stock Opname
 	v1.Post("/stock-opname", auth, txController.CreateStockOpname)

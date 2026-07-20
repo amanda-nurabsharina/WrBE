@@ -27,6 +27,7 @@ type PurchaseOrderItem struct {
 	Qty         int       `gorm:"not null;default:0" json:"qty"`
 	ReceivedQty int       `gorm:"not null;default:0" json:"received_qty"`
 	Price       float64   `gorm:"type:numeric(15,2);default:0" json:"price"`
+	Unit        string    `gorm:"type:varchar(20);default:''" json:"unit"`
 	CreatedAt   time.Time `gorm:"autoCreateTime:milli" json:"created_at"`
 	UpdatedAt   time.Time `gorm:"autoCreateTime:milli;autoUpdateTime:milli" json:"updated_at"`
 }

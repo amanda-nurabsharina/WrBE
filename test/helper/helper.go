@@ -15,6 +15,17 @@ import (
 
 func ClearAll(db *gorm.DB) {
 	ClearToken(db)
+	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&model.StockTransaction{})
+	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&model.InventoryBatch{})
+	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&model.SalesOrderItem{})
+	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&model.SalesOrder{})
+	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&model.PurchaseOrderItem{})
+	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&model.PurchaseOrder{})
+	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&model.Product{})
+	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&model.Supplier{})
+	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&model.Customer{})
+	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&model.PackagingUnit{})
+	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&model.ActivityLog{})
 	ClearUsers(db)
 }
 

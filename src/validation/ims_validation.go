@@ -68,15 +68,40 @@ type InwardRequest struct {
 	WarehouseID   string  `json:"warehouse_id" validate:"required,uuid"`
 	LocationID    string  `json:"location_id" validate:"required,uuid"`
 	POID          string  `json:"po_id" validate:"omitempty,uuid"`
+	ProofDocument string  `json:"proof_document"`
+	Status        string  `json:"status" validate:"omitempty,oneof=draft completed"`
 }
 
 type OutwardRequest struct {
-	ProductID    string  `json:"product_id" validate:"required,uuid"`
-	Qty          int     `json:"qty" validate:"required,gt=0"`
-	Purpose      string  `json:"purpose" validate:"max=100"`
-	Description  string  `json:"description" validate:"max=255"`
-	SOID         string  `json:"so_id" validate:"omitempty,uuid"`
-	SellingPrice float64 `json:"selling_price" validate:"omitempty,min=0"`
+	ProductID     string  `json:"product_id" validate:"required,uuid"`
+	Qty           int     `json:"qty" validate:"required,gt=0"`
+	Purpose       string  `json:"purpose" validate:"max=100"`
+	Description   string  `json:"description" validate:"max=255"`
+	SOID          string  `json:"so_id" validate:"omitempty,uuid"`
+	SellingPrice  float64 `json:"selling_price" validate:"omitempty,min=0"`
+	Destination   string  `json:"destination"`
+	ProofDocument string  `json:"proof_document"`
+	Status        string  `json:"status" validate:"omitempty,oneof=draft completed"`
+	InvoiceNo     string  `json:"invoice_no" validate:"required,min=3,max=50"`
+}
+
+type UpdateTransactionRequest struct {
+	Qty           int     `json:"qty" validate:"required,gt=0"`
+	Price         float64 `json:"price" validate:"min=0"`
+	ReferenceNo   string  `json:"reference_no"`
+	BatchNumber   string  `json:"batch_number"`
+	ExpiredDate   string  `json:"expired_date"`
+	WarehouseID   string  `json:"warehouse_id"`
+	LocationID    string  `json:"location_id"`
+	SupplierID    string  `json:"supplier_id"`
+	Destination   string  `json:"destination"`
+	Purpose       string  `json:"purpose"`
+	Description   string  `json:"description"`
+	ProofDocument string  `json:"proof_document"`
+}
+
+type UpdateSalesOrderPaymentRequest struct {
+	PaymentStatus string `json:"payment_status" validate:"required,oneof=unpaid partially_paid paid"`
 }
 
 type StockOpnameRequest struct {
@@ -131,6 +156,7 @@ type PurchaseOrderItemReq struct {
 	ProductID string  `json:"product_id" validate:"required,uuid"`
 	Qty       int     `json:"qty" validate:"required,gt=0"`
 	Price     float64 `json:"price" validate:"required,min=0"`
+	Unit      string  `json:"unit"`
 }
 
 type CreatePurchaseOrder struct {

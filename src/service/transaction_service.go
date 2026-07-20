@@ -21,6 +21,8 @@ type TransactionService interface {
 	CreateOutwardTransaction(c *fiber.Ctx, userID string, req *validation.OutwardRequest) ([]model.StockTransaction, error)
 	CreateStockOpname(c *fiber.Ctx, userID string, req *validation.StockOpnameRequest) (*model.StockTransaction, error)
 	ApproveB3Inward(c *fiber.Ctx, batchID string) (*model.InventoryBatch, error)
+	UpdateTransaction(c *fiber.Ctx, id string, req *validation.UpdateTransactionRequest) (*model.StockTransaction, error)
+	CompleteTransaction(c *fiber.Ctx, id string, proofDocument string) (*model.StockTransaction, error)
 }
 
 type transactionService struct {
@@ -41,6 +43,7 @@ func (s *transactionService) GetTransactions(c *fiber.Ctx, search string, txType
 	var txs []model.StockTransaction
 	query := s.DB.WithContext(c.Context()).
 		Preload("User").
+		Preload("Supplier").
 		Preload("Batch").
 		Preload("Batch.Product").
 		Preload("Batch.Warehouse").
@@ -103,12 +106,25 @@ func (s *transactionService) CreateInwardTransaction(c *fiber.Ctx, userID string
 		}
 	}
 
+	var supUUID *uuid.UUID
+	if req.SupplierID != "" {
+		s, err := uuid.Parse(req.SupplierID)
+		if err == nil {
+			supUUID = &s
+		}
+	}
+
 	var tx *model.StockTransaction
 
 	// Execute GORM Database Transaction
 	errTx := s.DB.Transaction(func(txDb *gorm.DB) error {
-		// If PO is provided, matching delivery checks
-		if poUUID != nil {
+		// If PO is provided, matching delivery checks (only if not draft!)
+		txStatus := "completed"
+		if req.Status == "draft" {
+			txStatus = "draft"
+		}
+
+		if poUUID != nil && txStatus != "draft" {
 			var po model.PurchaseOrder
 			if err := txDb.Preload("Items").First(&po, "id = ?", *poUUID).Error; err != nil {
 				return fmt.Errorf("purchase order not found")
@@ -160,16 +176,23 @@ func (s *transactionService) CreateInwardTransaction(c *fiber.Ctx, userID string
 		}
 
 		batchStatus := "active"
-		if product.RegCategory == "B3" {
+		if txStatus == "draft" {
+			batchStatus = "draft"
+		} else if product.RegCategory == "B3" {
 			batchStatus = "quarantine"
 		} else if time.Now().After(expDate) {
 			batchStatus = "expired"
 		}
 
-		// Check if Batch already exists in this location
+		// Check if Batch already exists in this location (only if not draft)
 		var batch model.InventoryBatch
-		errFind := txDb.Where("product_id = ? And batch_number = ? And warehouse_id = ? And location_id = ?",
-			pID, req.BatchNumber, wID, locID).First(&batch).Error
+		var errFind error
+		if txStatus == "draft" {
+			errFind = gorm.ErrRecordNotFound
+		} else {
+			errFind = txDb.Where("product_id = ? And batch_number = ? And warehouse_id = ? And location_id = ? And status != ?",
+				pID, req.BatchNumber, wID, locID, "draft").First(&batch).Error
+		}
 
 		if errFind == nil {
 			// Batch exists: update Qty and update Expired Date if provided
@@ -215,6 +238,9 @@ func (s *transactionService) CreateInwardTransaction(c *fiber.Ctx, userID string
 			ReferenceNo:     req.InvoiceNo,
 			UserID:          uID,
 			POID:            poUUID,
+			SupplierID:      supUUID,
+			ProofDocument:   req.ProofDocument,
+			Status:          txStatus,
 		}
 
 		if errCreateTx := txDb.Create(tx).Error; errCreateTx != nil {
@@ -232,7 +258,7 @@ func (s *transactionService) CreateInwardTransaction(c *fiber.Ctx, userID string
 	// Retrieve batch details for description
 	var product model.Product
 	s.DB.First(&product, "id = ?", tx.Batch.ProductID)
-	LogCtxActivity(s.DB, c, "CREATE", "inward", tx.ID.String(), fmt.Sprintf("Received inward stock: %d units of product code %s in batch %s", tx.Qty, product.Code, tx.Batch.BatchNumber))
+	LogCtxActivity(s.DB, c, "CREATE", "inward", tx.ID.String(), fmt.Sprintf("Received inward stock: %d units of product code %s in batch %s (status: %s)", tx.Qty, product.Code, tx.Batch.BatchNumber, tx.Status))
 
 	return tx, nil
 }
@@ -261,11 +287,19 @@ func (s *transactionService) CreateOutwardTransaction(c *fiber.Ctx, userID strin
 	}
 
 	var createdTxs []model.StockTransaction
-	refNo := fmt.Sprintf("TX-OUT-%d", time.Now().Unix())
+	refNo := req.InvoiceNo
+	if refNo == "" {
+		refNo = fmt.Sprintf("TX-OUT-%d", time.Now().Unix())
+	}
 
 	errTx := s.DB.Transaction(func(txDb *gorm.DB) error {
+		txStatus := "completed"
+		if req.Status == "draft" {
+			txStatus = "draft"
+		}
+
 		// If SO is provided, validate B3 approvals and update SO progress
-		if soUUID != nil {
+		if soUUID != nil && txStatus != "draft" {
 			var so model.SalesOrder
 			if err := txDb.Preload("Items").First(&so, "id = ?", *soUUID).Error; err != nil {
 				return fmt.Errorf("sales order not found")
@@ -366,6 +400,10 @@ func (s *transactionService) CreateOutwardTransaction(c *fiber.Ctx, userID strin
 				UserID:          uID,
 				SOID:            soUUID,
 				SellingPrice:    req.SellingPrice,
+				Destination:     req.Destination,
+				Description:     req.Description,
+				ProofDocument:   req.ProofDocument,
+				Status:          txStatus,
 			}
 
 			if errCreate := txDb.Create(&txLog).Error; errCreate != nil {
@@ -386,7 +424,7 @@ func (s *transactionService) CreateOutwardTransaction(c *fiber.Ctx, userID strin
 	// Retrieve product name
 	var product model.Product
 	s.DB.First(&product, "id = ?", pID)
-	LogCtxActivity(s.DB, c, "CREATE", "outward", refNo, fmt.Sprintf("Shipped outward stock: %d units of product code %s using FEFO", req.Qty, product.Code))
+	LogCtxActivity(s.DB, c, "CREATE", "outward", refNo, fmt.Sprintf("Shipped outward stock: %d units of product code %s using FEFO (status: %s)", req.Qty, product.Code, req.Status))
 
 	return createdTxs, nil
 }
@@ -519,4 +557,246 @@ func (s *transactionService) ApproveB3Inward(c *fiber.Ctx, batchID string) (*mod
 	LogCtxActivity(s.DB, c, "APPROVE", "inward", batch.ID.String(), fmt.Sprintf("Approved quarantined B3 product batch %s of product code %s", batch.BatchNumber, product.Code))
 
 	return &batch, nil
+}
+
+func (s *transactionService) UpdateTransaction(c *fiber.Ctx, id string, req *validation.UpdateTransactionRequest) (*model.StockTransaction, error) {
+	if err := s.Validate.Struct(req); err != nil {
+		return nil, err
+	}
+
+	txID, err := uuid.Parse(id)
+	if err != nil {
+		return nil, fiber.NewError(fiber.StatusBadRequest, "Invalid Transaction ID format")
+	}
+
+	var tx model.StockTransaction
+	if err := s.DB.Preload("Batch").First(&tx, "id = ?", txID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fiber.NewError(fiber.StatusNotFound, "Transaction not found")
+		}
+		return nil, fiber.NewError(fiber.StatusInternalServerError, "Database error")
+	}
+
+	errTx := s.DB.Transaction(func(txDb *gorm.DB) error {
+		var batch model.InventoryBatch
+		if err := txDb.First(&batch, "id = ?", tx.BatchID).Error; err != nil {
+			return err
+		}
+
+		if tx.TransactionType == "IN" {
+			// Inward edit: Qty adjustment check
+			adjustedQty := batch.Qty - tx.Qty + req.Qty
+			if adjustedQty < 0 {
+				return fmt.Errorf("cannot reduce quantity to %d because batch only has %d units left (stock already consumed)", req.Qty, batch.Qty)
+			}
+
+			// Update batch quantities and settings
+			batch.Qty = adjustedQty
+			if req.BatchNumber != "" {
+				batch.BatchNumber = req.BatchNumber
+			}
+			if req.ExpiredDate != "" {
+				expDate, err := time.Parse("2006-01-02", req.ExpiredDate)
+				if err != nil {
+					return fmt.Errorf("invalid expired date format")
+				}
+				batch.ExpiredDate = expDate
+			}
+			if req.WarehouseID != "" {
+				wID, err := uuid.Parse(req.WarehouseID)
+				if err != nil {
+					return fmt.Errorf("invalid warehouse id")
+				}
+				batch.WarehouseID = wID
+			}
+			if req.LocationID != "" {
+				locID, err := uuid.Parse(req.LocationID)
+				if err != nil {
+					return fmt.Errorf("invalid location id")
+				}
+				batch.LocationID = locID
+			}
+			if req.Price > 0 {
+				batch.PurchasePrice = req.Price
+			}
+
+			if errSave := txDb.Save(&batch).Error; errSave != nil {
+				return errSave
+			}
+
+			// Update transaction
+			tx.Qty = req.Qty
+			tx.ReferenceNo = req.ReferenceNo
+			tx.ProofDocument = req.ProofDocument
+			if req.SupplierID != "" {
+				supID, err := uuid.Parse(req.SupplierID)
+				if err == nil {
+					tx.SupplierID = &supID
+				}
+			}
+
+			if errSaveTx := txDb.Save(&tx).Error; errSaveTx != nil {
+				return errSaveTx
+			}
+
+		} else if tx.TransactionType == "OUT" {
+			// Outward edit: Qty adjustment check
+			adjustedQty := batch.Qty + tx.Qty - req.Qty
+			if adjustedQty < 0 {
+				return fmt.Errorf("insufficient stock in batch %s: requested adjustment requires %d units, but only %d units are available in this batch", batch.BatchNumber, req.Qty, batch.Qty)
+			}
+
+			batch.Qty = adjustedQty
+			if errSave := txDb.Save(&batch).Error; errSave != nil {
+				return errSave
+			}
+
+			// Update transaction
+			tx.Qty = req.Qty
+			tx.SellingPrice = req.Price
+			tx.ReferenceNo = req.ReferenceNo
+			tx.Destination = req.Destination
+			tx.Description = req.Description
+			tx.ProofDocument = req.ProofDocument
+
+			if errSaveTx := txDb.Save(&tx).Error; errSaveTx != nil {
+				return errSaveTx
+			}
+		}
+
+		return nil
+	})
+
+	if errTx != nil {
+		return nil, fiber.NewError(fiber.StatusBadRequest, errTx.Error())
+	}
+
+	// Reload with preloads
+	s.DB.Preload("User").Preload("Supplier").Preload("Batch").Preload("Batch.Product").Preload("Batch.Warehouse").Preload("Batch.Location").First(&tx, tx.ID)
+
+	LogCtxActivity(s.DB, c, "UPDATE", "transaction", tx.ID.String(), fmt.Sprintf("Updated transaction %s (type: %s, new qty: %d)", tx.ReferenceNo, tx.TransactionType, tx.Qty))
+
+	return &tx, nil
+}
+
+func (s *transactionService) CompleteTransaction(c *fiber.Ctx, id string, proofDocument string) (*model.StockTransaction, error) {
+	txID, err := uuid.Parse(id)
+	if err != nil {
+		return nil, fiber.NewError(fiber.StatusBadRequest, "Invalid Transaction ID format")
+	}
+
+	var tx model.StockTransaction
+	if err := s.DB.Preload("Batch").First(&tx, "id = ?", txID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fiber.NewError(fiber.StatusNotFound, "Transaction not found")
+		}
+		return nil, fiber.NewError(fiber.StatusInternalServerError, "Database error")
+	}
+
+	if tx.Status != "draft" {
+		return nil, fiber.NewError(fiber.StatusBadRequest, "Only draft transactions can be completed")
+	}
+
+	errTx := s.DB.Transaction(func(txDb *gorm.DB) error {
+		var batch model.InventoryBatch
+		if err := txDb.First(&batch, "id = ?", tx.BatchID).Error; err != nil {
+			return err
+		}
+
+		// Activate batch/transaction
+		tx.Status = "completed"
+		if proofDocument != "" {
+			tx.ProofDocument = proofDocument
+		}
+
+		if tx.TransactionType == "IN" {
+			// Determine final batch status
+			var product model.Product
+			if errProd := txDb.First(&product, "id = ?", batch.ProductID).Error; errProd != nil {
+				return errProd
+			}
+
+			batchStatus := "active"
+			if product.RegCategory == "B3" {
+				batchStatus = "quarantine"
+			} else if time.Now().After(batch.ExpiredDate) {
+				batchStatus = "expired"
+			}
+			batch.Status = batchStatus
+
+			// If linked to PO, perform check & PO progress update now!
+			if tx.POID != nil {
+				var po model.PurchaseOrder
+				if err := txDb.Preload("Items").First(&po, "id = ?", *tx.POID).Error; err == nil {
+					for i, item := range po.Items {
+						if item.ProductID == batch.ProductID {
+							po.Items[i].ReceivedQty += tx.Qty
+							txDb.Save(&po.Items[i])
+							break
+						}
+					}
+					// Update PO status
+					allCompleted := true
+					for _, item := range po.Items {
+						if item.ReceivedQty < item.Qty {
+							allCompleted = false
+						}
+					}
+					if allCompleted {
+						po.Status = "completed"
+					} else {
+						po.Status = "partially_received"
+					}
+					txDb.Save(&po)
+				}
+			}
+		} else if tx.TransactionType == "OUT" {
+			// If linked to SO, perform SO progress update now!
+			if tx.SOID != nil {
+				var so model.SalesOrder
+				if err := txDb.Preload("Items").First(&so, "id = ?", *tx.SOID).Error; err == nil {
+					for i, item := range so.Items {
+						if item.ProductID == batch.ProductID {
+							so.Items[i].ShippedQty += tx.Qty
+							txDb.Save(&so.Items[i])
+							break
+						}
+					}
+					allCompleted := true
+					for _, item := range so.Items {
+						if item.ShippedQty < item.Qty {
+							allCompleted = false
+						}
+					}
+					if allCompleted {
+						so.Status = "shipped"
+					} else {
+						so.Status = "partially_shipped"
+					}
+					txDb.Save(&so)
+				}
+			}
+		}
+
+		if errSaveBatch := txDb.Save(&batch).Error; errSaveBatch != nil {
+			return errSaveBatch
+		}
+
+		if errSaveTx := txDb.Save(&tx).Error; errSaveTx != nil {
+			return errSaveTx
+		}
+
+		return nil
+	})
+
+	if errTx != nil {
+		return nil, fiber.NewError(fiber.StatusBadRequest, errTx.Error())
+	}
+
+	// Reload with preloads
+	s.DB.Preload("User").Preload("Supplier").Preload("Batch").Preload("Batch.Product").Preload("Batch.Warehouse").Preload("Batch.Location").First(&tx, tx.ID)
+
+	LogCtxActivity(s.DB, c, "APPROVE", "transaction", tx.ID.String(), fmt.Sprintf("Completed draft transaction %s (type: %s, qty: %d)", tx.ReferenceNo, tx.TransactionType, tx.Qty))
+
+	return &tx, nil
 }

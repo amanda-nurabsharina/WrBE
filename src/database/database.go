@@ -80,6 +80,8 @@ func Connect(dbHost, dbName string) *gorm.DB {
 		&model.SalesOrder{}, &model.SalesOrderItem{},
 		&model.InventoryBatch{}, &model.StockTransaction{},
 		&model.ActivityLog{},
+		&model.BarcodeRegistry{}, &model.InventoryMovement{},
+		&model.ScanSession{}, &model.ScanLog{}, &model.BarcodePrintHistory{},
 	); err != nil {
 		utils.Log.Errorf("Failed to auto-migrate tables: %v", err)
 	} else {
@@ -93,6 +95,12 @@ func Connect(dbHost, dbName string) *gorm.DB {
 }
 
 func seedDatabase(db *gorm.DB) {
+	// Create Postgres sequences for barcode sequential numbering
+	utils.Log.Info("Creating native barcode sequences if missing...")
+	db.Exec("CREATE SEQUENCE IF NOT EXISTS barcode_product_seq START WITH 1;")
+	db.Exec("CREATE SEQUENCE IF NOT EXISTS barcode_batch_seq START WITH 1;")
+	db.Exec("CREATE SEQUENCE IF NOT EXISTS barcode_location_seq START WITH 1;")
+
 	// 1. Seed/Update Roles
 	utils.Log.Info("Seeding roles...")
 	for _, roleCfg := range config.DefaultRoles {
@@ -203,39 +211,89 @@ func seedDatabase(db *gorm.DB) {
 	// 4. Seed Warehouse
 	utils.Log.Info("Seeding default warehouses...")
 	var warehouse model.Warehouse
-	var whCount int64
-	db.Model(&model.Warehouse{}).Count(&whCount)
-	if whCount == 0 {
-		warehouse = model.Warehouse{
-			Code: "WH-MAIN",
-			Name: "Main Warehouse",
-		}
-		if err := db.Create(&warehouse).Error; err != nil {
-			utils.Log.Errorf("Failed to seed warehouse: %v", err)
-		} else {
+	var tempWarehouse model.Warehouse
+
+	// Main Warehouse
+	if err := db.Where("code = ?", "WH-MAIN").First(&warehouse).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			warehouse = model.Warehouse{
+				Code: "WH-MAIN",
+				Name: "Main Warehouse",
+			}
+			db.Create(&warehouse)
 			utils.Log.Info("Successfully seeded default warehouse: WH-MAIN")
 		}
-	} else {
-		db.First(&warehouse)
 	}
 
-	// 5. Seed Rack Locations
-	utils.Log.Info("Seeding default rack locations...")
+	// Temp Warehouse
+	if err := db.Where("code = ?", "TEMP-WH").First(&tempWarehouse).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			tempWarehouse = model.Warehouse{
+				Code: "TEMP-WH",
+				Name: "Temporary Receiving Warehouse",
+			}
+			db.Create(&tempWarehouse)
+			utils.Log.Info("Successfully seeded default warehouse: TEMP-WH")
+		}
+	}
+
+	// 5. Seed Locations & Temp Receiving Location
+	utils.Log.Info("Seeding default locations...")
+	
+	seedLocation := func(whID uuid.UUID, aisle, rackName, shelf, bin, barcode string, maxWeight, maxVolume float64) {
+		var loc model.Location
+		err := db.Where("warehouse_id = ? AND rack = ?", whID, rackName).First(&loc).Error
+		if err != nil && errors.Is(err, gorm.ErrRecordNotFound) {
+			loc = model.Location{
+				WarehouseID: whID,
+				Aisle:       aisle,
+				Rack:        rackName,
+				Shelf:       shelf,
+				Bin:         bin,
+				MaxWeight:   maxWeight,
+				MaxVolume:   maxVolume,
+				Barcode:     barcode,
+			}
+			db.Create(&loc)
+			utils.Log.Infof("Seeded location: %s (barcode: %s)", rackName, barcode)
+		} else if err == nil {
+			loc.Aisle = aisle
+			loc.Shelf = shelf
+			loc.Bin = bin
+			loc.MaxWeight = maxWeight
+			loc.MaxVolume = maxVolume
+			if loc.Barcode == "" {
+				loc.Barcode = barcode
+			}
+			db.Save(&loc)
+		}
+		
+		// Register in BarcodeRegistry
+		var reg model.BarcodeRegistry
+		errReg := db.Where("barcode = ?", barcode).First(&reg).Error
+		if errReg != nil && errors.Is(errReg, gorm.ErrRecordNotFound) {
+			reg = model.BarcodeRegistry{
+				Barcode:     barcode,
+				Type:        "LOCATION",
+				ReferenceID: loc.ID,
+			}
+			db.Create(&reg)
+			utils.Log.Infof("Registered location barcode: %s", barcode)
+		}
+	}
+
 	var rack1, rack2, rack3 model.Location
-	var locCount int64
-	db.Model(&model.Location{}).Count(&locCount)
-	if locCount == 0 && warehouse.ID != uuid.Nil {
-		rack1 = model.Location{WarehouseID: warehouse.ID, Rack: "Rack-A1"}
-		rack2 = model.Location{WarehouseID: warehouse.ID, Rack: "Rack-A2"}
-		rack3 = model.Location{WarehouseID: warehouse.ID, Rack: "Rack-B1"}
-		db.Create(&rack1)
-		db.Create(&rack2)
-		db.Create(&rack3)
-		utils.Log.Info("Successfully seeded default rack locations (Rack-A1, Rack-A2, Rack-B1)")
-	} else {
-		db.Where("rack = ?", "Rack-A1").First(&rack1)
-		db.Where("rack = ?", "Rack-A2").First(&rack2)
-		db.Where("rack = ?", "Rack-B1").First(&rack3)
+	if warehouse.ID != uuid.Nil {
+		seedLocation(warehouse.ID, "Aisle-A", "Rack-A1", "Shelf-1", "Bin-01", "LOC-A01-R01-S01", 1000.0, 50.0)
+		seedLocation(warehouse.ID, "Aisle-A", "Rack-A2", "Shelf-2", "Bin-02", "LOC-A01-R02-S02", 1000.0, 50.0)
+		seedLocation(warehouse.ID, "Aisle-B", "Rack-B1", "Shelf-1", "Bin-01", "LOC-B01-R01-S01", 2000.0, 100.0)
+
+		db.Where("warehouse_id = ? AND rack = ?", warehouse.ID, "Rack-A1").First(&rack1)
+		db.Where("warehouse_id = ? AND rack = ?", warehouse.ID, "Rack-A2").First(&rack2)
+		db.Where("warehouse_id = ? AND rack = ?", warehouse.ID, "Rack-B1").First(&rack3)
+	}
+	if tempWarehouse.ID != uuid.Nil {
+		seedLocation(tempWarehouse.ID, "RECEIVING", "TEMP-RECEIVING", "FLOOR", "BIN-TEMP", "LOC-TEMP-RECEIVING", 5000.0, 500.0)
 	}
 
 	// 5.5. Seed Packaging Units

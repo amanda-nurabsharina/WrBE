@@ -123,6 +123,7 @@ func IMSRoutes(
 	// Transaction Edit / Completion
 	v1.Put("/inventory/transactions/:id", auth, txController.UpdateTransaction)
 	v1.Put("/inventory/transactions/:id/complete", auth, txController.CompleteTransaction)
+	v1.Post("/inventory/transactions/:id/confirm-pick", auth, txController.ConfirmPick)
 
 	// Stock Opname
 	v1.Post("/stock-opname", auth, txController.CreateStockOpname)

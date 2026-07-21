@@ -1,6 +1,7 @@
 package service
 
 import (
+	"app/src/barcode"
 	"app/src/model"
 	"app/src/utils"
 	"app/src/validation"
@@ -23,19 +24,22 @@ type TransactionService interface {
 	ApproveB3Inward(c *fiber.Ctx, batchID string) (*model.InventoryBatch, error)
 	UpdateTransaction(c *fiber.Ctx, id string, req *validation.UpdateTransactionRequest) (*model.StockTransaction, error)
 	CompleteTransaction(c *fiber.Ctx, id string, proofDocument string) (*model.StockTransaction, error)
+	ConfirmPick(c *fiber.Ctx, userID string, txID string, batchBarcode string, locationBarcode string) (*model.StockTransaction, error)
 }
 
 type transactionService struct {
-	Log      *logrus.Logger
-	DB       *gorm.DB
-	Validate *validator.Validate
+	Log       *logrus.Logger
+	DB        *gorm.DB
+	Validate  *validator.Validate
+	bcService barcode.Service
 }
 
-func NewTransactionService(db *gorm.DB, validate *validator.Validate) TransactionService {
+func NewTransactionService(db *gorm.DB, validate *validator.Validate, bcService barcode.Service) TransactionService {
 	return &transactionService{
-		Log:      utils.Log,
-		DB:       db,
-		Validate: validate,
+		Log:       utils.Log,
+		DB:        db,
+		Validate:  validate,
+		bcService: bcService,
 	}
 }
 
@@ -175,16 +179,22 @@ func (s *transactionService) CreateInwardTransaction(c *fiber.Ctx, userID string
 			return fmt.Errorf("product not found")
 		}
 
-		batchStatus := "active"
-		if txStatus == "draft" {
-			batchStatus = "draft"
-		} else if product.RegCategory == "B3" {
-			batchStatus = "quarantine"
-		} else if time.Now().After(expDate) {
-			batchStatus = "expired"
+		// Retrieve virtual temporary warehouse and location for receiving
+		var tempWH model.Warehouse
+		if err := txDb.Where("code = ?", "TEMP-WH").First(&tempWH).Error; err != nil {
+			return fmt.Errorf("temporary warehouse not found")
 		}
 
-		// Check if Batch already exists in this location (only if not draft)
+		var tempLoc model.Location
+		if err := txDb.Where("warehouse_id = ? AND rack = ?", tempWH.ID, "TEMP-RECEIVING").First(&tempLoc).Error; err != nil {
+			return fmt.Errorf("temporary receiving location not found")
+		}
+
+		// Reassign target location and warehouse to the virtual temp area
+		wID = tempWH.ID
+		locID = tempLoc.ID
+
+		// Check if Batch already exists in the temp receiving location (only if not draft)
 		var batch model.InventoryBatch
 		var errFind error
 		if txStatus == "draft" {
@@ -197,34 +207,67 @@ func (s *transactionService) CreateInwardTransaction(c *fiber.Ctx, userID string
 		if errFind == nil {
 			// Batch exists: update Qty and update Expired Date if provided
 			batch.Qty += req.Qty
+			batch.AvailableQty = batch.Qty - batch.AllocatedQty
 			batch.ExpiredDate = expDate
-			if batchStatus != "quarantine" {
-				if time.Now().After(expDate) {
-					batch.Status = "expired"
-				} else {
-					batch.Status = "active"
-				}
-			}
 
 			if errSave := txDb.Save(&batch).Error; errSave != nil {
 				return errSave
 			}
-		} else if gorm.ErrRecordNotFound == errFind {
-			// Batch doesn't exist: create new batch
+
+			// Create Inventory Movement log for receiving
+			parsedUserID, _ := uuid.Parse(userID)
+			movement := model.InventoryMovement{
+				BatchID:      batch.ID,
+				ToLocationID: &tempLoc.ID,
+				Qty:          req.Qty,
+				MovementType: "RECEIVING",
+				CreatedBy:    parsedUserID,
+			}
+			if errMove := txDb.Create(&movement).Error; errMove != nil {
+				return errMove
+			}
+		} else if errors.Is(errFind, gorm.ErrRecordNotFound) {
+			// Batch doesn't exist: create new batch in waiting_put_away status
 			batch = model.InventoryBatch{
 				ProductID:     pID,
 				BatchNumber:   req.BatchNumber,
 				ExpiredDate:   expDate,
 				Qty:           req.Qty,
+				AllocatedQty:  0,
+				AvailableQty:  req.Qty,
 				WarehouseID:   wID,
 				LocationID:    locID,
 				PurchasePrice: req.PurchasePrice,
-				Status:        batchStatus,
+				Status:        "waiting_put_away",
 				POID:          poUUID,
+				ReceivedAt:    time.Now(),
 			}
 
 			if errCreate := txDb.Create(&batch).Error; errCreate != nil {
 				return errCreate
+			}
+
+			// Generate sequential Batch Barcode and register it internally
+			barcodeStr, errBar := s.bcService.GenerateBarcode(txDb, "BAT", batch.ID)
+			if errBar != nil {
+				return errBar
+			}
+			batch.Barcode = barcodeStr
+			if errSaveBar := txDb.Save(&batch).Error; errSaveBar != nil {
+				return errSaveBar
+			}
+
+			// Create Inventory Movement log for receiving
+			parsedUserID, _ := uuid.Parse(userID)
+			movement := model.InventoryMovement{
+				BatchID:      batch.ID,
+				ToLocationID: &tempLoc.ID,
+				Qty:          req.Qty,
+				MovementType: "RECEIVING",
+				CreatedBy:    parsedUserID,
+			}
+			if errMove := txDb.Create(&movement).Error; errMove != nil {
+				return errMove
 			}
 		} else {
 			return errFind
@@ -350,10 +393,10 @@ func (s *transactionService) CreateOutwardTransaction(c *fiber.Ctx, userID strin
 		}
 
 		// FEFO Selection Algorithm:
-		// 1. Fetch active batches for this product with Qty > 0, ordered by expired_date ASC
+		// 1. Fetch stored batches for this product with AvailableQty > 0, ordered by FEFO rules
 		var activeBatches []model.InventoryBatch
-		errQuery := txDb.Where("product_id = ? And qty > 0 And status = ?", pID, "active").
-			Order("expired_date asc").Find(&activeBatches).Error
+		errQuery := txDb.Where("product_id = ? And available_qty > 0 And status = ?", pID, "stored").
+			Order("expired_date asc, received_at asc, id asc").Find(&activeBatches).Error
 		if errQuery != nil {
 			return errQuery
 		}
@@ -361,7 +404,7 @@ func (s *transactionService) CreateOutwardTransaction(c *fiber.Ctx, userID strin
 		// Calculate total available stock in active batches
 		totalAvailable := 0
 		for _, b := range activeBatches {
-			totalAvailable += b.Qty
+			totalAvailable += b.AvailableQty
 		}
 
 		if totalAvailable < req.Qty {
@@ -376,14 +419,16 @@ func (s *transactionService) CreateOutwardTransaction(c *fiber.Ctx, userID strin
 			}
 
 			deductQty := 0
-			if batch.Qty >= remainingQty {
+			if batch.AvailableQty >= remainingQty {
 				deductQty = remainingQty
-				batch.Qty -= remainingQty
+				batch.AvailableQty -= remainingQty
+				batch.AllocatedQty += remainingQty
 				remainingQty = 0
 			} else {
-				deductQty = batch.Qty
-				remainingQty -= batch.Qty
-				batch.Qty = 0
+				deductQty = batch.AvailableQty
+				remainingQty -= batch.AvailableQty
+				batch.AllocatedQty += batch.AvailableQty
+				batch.AvailableQty = 0
 			}
 
 			// Update batch in DB
@@ -391,7 +436,7 @@ func (s *transactionService) CreateOutwardTransaction(c *fiber.Ctx, userID strin
 				return errSave
 			}
 
-			// Create outward transaction log
+			// Create outward transaction log (initialized in 'picking' status)
 			txLog := model.StockTransaction{
 				BatchID:         batch.ID,
 				TransactionType: "OUT",
@@ -403,7 +448,7 @@ func (s *transactionService) CreateOutwardTransaction(c *fiber.Ctx, userID strin
 				Destination:     req.Destination,
 				Description:     req.Description,
 				ProofDocument:   req.ProofDocument,
-				Status:          txStatus,
+				Status:          "picking",
 			}
 
 			if errCreate := txDb.Create(&txLog).Error; errCreate != nil {
@@ -797,6 +842,137 @@ func (s *transactionService) CompleteTransaction(c *fiber.Ctx, id string, proofD
 	s.DB.Preload("User").Preload("Supplier").Preload("Batch").Preload("Batch.Product").Preload("Batch.Warehouse").Preload("Batch.Location").First(&tx, tx.ID)
 
 	LogCtxActivity(s.DB, c, "APPROVE", "transaction", tx.ID.String(), fmt.Sprintf("Completed draft transaction %s (type: %s, qty: %d)", tx.ReferenceNo, tx.TransactionType, tx.Qty))
+
+	return &tx, nil
+}
+
+func (s *transactionService) ConfirmPick(c *fiber.Ctx, userID string, txID string, batchBarcode string, locationBarcode string) (*model.StockTransaction, error) {
+	uID, _ := uuid.Parse(userID)
+	tID, err := uuid.Parse(txID)
+	if err != nil {
+		return nil, fiber.NewError(fiber.StatusBadRequest, "Invalid Transaction ID")
+	}
+
+	var tx model.StockTransaction
+	if err := s.DB.Preload("Batch").Preload("Batch.Product").Preload("Batch.Location").First(&tx, "id = ?", tID).Error; err != nil {
+		return nil, fiber.NewError(fiber.StatusNotFound, "Picking item not found")
+	}
+
+	if tx.Status != "picking" {
+		return nil, fiber.NewError(fiber.StatusBadRequest, "This item is not in picking status")
+	}
+
+	// 1. Resolve scanned location
+	var loc model.Location
+	if err := s.DB.First(&loc, "barcode = ?", locationBarcode).Error; err != nil {
+		_ = s.bcService.Scan(locationBarcode, uID, "PICKING", "FAILED", "Wrong Location", c.IP(), c.Get("User-Agent"), nil)
+		return nil, fiber.NewError(fiber.StatusBadRequest, "Wrong Location")
+	}
+
+	// Verify scanned location matches allocated location
+	if tx.Batch.LocationID != loc.ID {
+		_ = s.bcService.Scan(locationBarcode, uID, "PICKING", "FAILED", "Wrong Location", c.IP(), c.Get("User-Agent"), nil)
+		return nil, fiber.NewError(fiber.StatusBadRequest, "Wrong Location")
+	}
+
+	// 2. Resolve scanned batch
+	var batch model.InventoryBatch
+	if err := s.DB.First(&batch, "barcode = ?", batchBarcode).Error; err != nil {
+		_ = s.bcService.Scan(batchBarcode, uID, "PICKING", "FAILED", "Barcode Not Found", c.IP(), c.Get("User-Agent"), nil)
+		return nil, fiber.NewError(fiber.StatusBadRequest, "Barcode Not Found")
+	}
+
+	// Verify scanned batch matches allocated batch
+	if tx.BatchID != batch.ID {
+		_ = s.bcService.Scan(batchBarcode, uID, "PICKING", "FAILED", "Incorrect Batch Picked", c.IP(), c.Get("User-Agent"), nil)
+		return nil, fiber.NewError(fiber.StatusBadRequest, "Incorrect Batch Picked")
+	}
+
+	// Validation checks on batch (Expired? Active?)
+	if batch.Status == "damaged" || batch.Status == "quarantine" {
+		_ = s.bcService.Scan(batchBarcode, uID, "PICKING", "FAILED", "Inactive Batch", c.IP(), c.Get("User-Agent"), nil)
+		return nil, fiber.NewError(fiber.StatusBadRequest, "Inactive Batch")
+	}
+	if batch.ExpiredDate.Before(time.Now()) || batch.Status == "expired" {
+		_ = s.bcService.Scan(batchBarcode, uID, "PICKING", "FAILED", "Expired Batch", c.IP(), c.Get("User-Agent"), nil)
+		return nil, fiber.NewError(fiber.StatusBadRequest, "Expired Batch")
+	}
+
+	// 3. Confirm Pick Transaction
+	errTx := s.DB.Transaction(func(txDb *gorm.DB) error {
+		// Deduct physical quantity and allocated quantity
+		batch.Qty -= tx.Qty
+		batch.AllocatedQty -= tx.Qty
+		
+		// If fully picked and stock is empty, we can update status, else keep stored
+		if batch.Qty == 0 {
+			batch.Status = "picked"
+		}
+
+		if errSaveBatch := txDb.Save(&batch).Error; errSaveBatch != nil {
+			return errSaveBatch
+		}
+
+		// Update transaction status
+		tx.Status = "completed"
+		if errSaveTx := txDb.Save(&tx).Error; errSaveTx != nil {
+			return errSaveTx
+		}
+
+		// Record Movement: location -> picked/shipped (nil ToLocationID)
+		movement := model.InventoryMovement{
+			BatchID:        batch.ID,
+			FromLocationID: &loc.ID,
+			ToLocationID:   nil, // picked for shipping
+			Qty:            tx.Qty,
+			MovementType:   "PICKING",
+			CreatedBy:      uID,
+		}
+		if errMove := txDb.Create(&movement).Error; errMove != nil {
+			return errMove
+		}
+
+		// Update Sales Order progress
+		if tx.SOID != nil {
+			var so model.SalesOrder
+			if err := txDb.Preload("Items").First(&so, "id = ?", *tx.SOID).Error; err == nil {
+				for i, item := range so.Items {
+					if item.ProductID == batch.ProductID {
+						so.Items[i].ShippedQty += tx.Qty
+						txDb.Save(&so.Items[i])
+						break
+					}
+				}
+				allCompleted := true
+				for _, item := range so.Items {
+					if item.ShippedQty < item.Qty {
+						allCompleted = false
+					}
+				}
+				if allCompleted {
+					so.Status = "shipped"
+				} else {
+					so.Status = "partially_shipped"
+				}
+				txDb.Save(&so)
+			}
+		}
+
+		return nil
+	})
+
+	if errTx != nil {
+		_ = s.bcService.Scan(batchBarcode, uID, "PICKING", "FAILED", errTx.Error(), c.IP(), c.Get("User-Agent"), nil)
+		return nil, fiber.NewError(fiber.StatusBadRequest, errTx.Error())
+	}
+
+	// Record success scan log
+	_ = s.bcService.Scan(batchBarcode, uID, "PICKING", "SUCCESS", "Picked successfully", c.IP(), c.Get("User-Agent"), nil)
+
+	// Reload with preloads
+	s.DB.Preload("User").Preload("Supplier").Preload("Batch").Preload("Batch.Product").Preload("Batch.Warehouse").Preload("Batch.Location").First(&tx, tx.ID)
+
+	LogCtxActivity(s.DB, c, "APPROVE", "picking", tx.ID.String(), fmt.Sprintf("Confirmed barcode pick for outward item ref %s, qty: %d", tx.ReferenceNo, tx.Qty))
 
 	return &tx, nil
 }

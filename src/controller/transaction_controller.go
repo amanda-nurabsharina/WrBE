@@ -170,3 +170,34 @@ func (ctrl *TransactionController) CompleteTransaction(c *fiber.Ctx) error {
 			Data:    tx,
 		})
 }
+
+type ConfirmPickRequest struct {
+	BatchBarcode    string `json:"batch_barcode" validate:"required"`
+	LocationBarcode string `json:"location_barcode" validate:"required"`
+}
+
+func (ctrl *TransactionController) ConfirmPick(c *fiber.Ctx) error {
+	id := c.Params("id")
+	user, ok := c.Locals("user").(*model.User)
+	if !ok || user == nil {
+		return fiber.NewError(fiber.StatusUnauthorized, "Unauthorized")
+	}
+
+	req := new(ConfirmPickRequest)
+	if err := c.BodyParser(req); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "Invalid request body")
+	}
+
+	tx, err := ctrl.TxService.ConfirmPick(c, user.ID.String(), id, req.BatchBarcode, req.LocationBarcode)
+	if err != nil {
+		return err
+	}
+
+	return c.Status(fiber.StatusOK).
+		JSON(response.SuccessWithData[*model.StockTransaction]{
+			Code:    fiber.StatusOK,
+			Status:  "success",
+			Message: "Pick confirmed and item dispatched successfully",
+			Data:    tx,
+		})
+}

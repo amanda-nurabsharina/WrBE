@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"strings"
+
 	"app/src/model"
 	"app/src/response"
 	"app/src/service"
@@ -22,6 +24,17 @@ func NewTransactionController(txService service.TransactionService) *Transaction
 func (ctrl *TransactionController) GetTransactions(c *fiber.Ctx) error {
 	search := c.Query("search", "")
 	txType := c.Query("type", "")
+
+	if txType == "" {
+		path := c.Path()
+		if strings.HasSuffix(path, "/in") {
+			txType = "in"
+		} else if strings.HasSuffix(path, "/out") {
+			txType = "out"
+		} else if strings.HasSuffix(path, "/adjustment") {
+			txType = "adjustment"
+		}
+	}
 
 	txs, err := ctrl.TxService.GetTransactions(c, search, txType)
 	if err != nil {

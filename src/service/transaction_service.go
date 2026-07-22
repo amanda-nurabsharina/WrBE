@@ -395,7 +395,7 @@ func (s *transactionService) CreateOutwardTransaction(c *fiber.Ctx, userID strin
 		// FEFO Selection Algorithm:
 		// 1. Fetch stored batches for this product with AvailableQty > 0, ordered by FEFO rules
 		var activeBatches []model.InventoryBatch
-		errQuery := txDb.Where("product_id = ? And available_qty > 0 And status = ?", pID, "stored").
+		errQuery := txDb.Where("product_id = ? And available_qty > 0 And status IN ('stored', 'active', 'waiting_put_away')", pID).
 			Order("expired_date asc, received_at asc, id asc").Find(&activeBatches).Error
 		if errQuery != nil {
 			return errQuery

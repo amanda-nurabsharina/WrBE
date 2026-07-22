@@ -57,7 +57,7 @@ func (s *productService) GetProducts(c *fiber.Ctx, search string) ([]model.Produ
 	var stocks []ProductStock
 	if len(products) > 0 {
 		if err := s.DB.WithContext(c.Context()).Model(&model.InventoryBatch{}).
-			Where("status = 'active'").
+			Where("status IN ('active', 'stored', 'waiting_put_away')").
 			Select("product_id, SUM(qty) as total_qty").
 			Group("product_id").
 			Scan(&stocks).Error; err != nil {

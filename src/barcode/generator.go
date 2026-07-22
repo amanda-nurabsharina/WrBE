@@ -2,6 +2,8 @@ package barcode
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"app/src/model"
@@ -19,37 +21,66 @@ func NewGenerator() Generator {
 }
 
 func (g *generator) Generate(db *gorm.DB, prefix string) (string, error) {
-	var seqName string
-	switch prefix {
-	case "PRD":
-		seqName = "barcode_product_seq"
-	case "BAT":
-		seqName = "barcode_batch_seq"
-	case "LOC":
-		seqName = "barcode_location_seq"
-	default:
-		return "", fmt.Errorf("invalid prefix: %s", prefix)
+	if prefix == "" {
+		prefix = "BAT"
 	}
 
-	for i := 0; i < 100; i++ {
-		var nextVal int64
-		query := fmt.Sprintf("SELECT nextval('%s')", seqName)
-		if err := db.Raw(query).Scan(&nextVal).Error; err != nil {
-			var count int64
-			db.Model(&model.BarcodeRegistry{}).Where("barcode LIKE ?", prefix+"%").Count(&count)
-			nextVal = count + 1 + int64(i)
-		}
+	// 1. Query highest existing barcode for this prefix from BarcodeRegistry
+	var maxBarcode string
+	db.Model(&model.BarcodeRegistry{}).
+		Where("barcode LIKE ?", prefix+"%").
+		Order("barcode DESC").
+		Limit(1).
+		Pluck("barcode", &maxBarcode)
 
-		barcodeStr := fmt.Sprintf("%s%08d", prefix, nextVal)
+	// 2. Also check InventoryBatch table if prefix is BAT
+	if prefix == "BAT" {
+		var maxBatchBarcode string
+		db.Model(&model.InventoryBatch{}).
+			Where("barcode LIKE ?", prefix+"%").
+			Order("barcode DESC").
+			Limit(1).
+			Pluck("barcode", &maxBatchBarcode)
 
-		// Verify barcode does not already exist in BarcodeRegistry
-		var existingCount int64
-		db.Model(&model.BarcodeRegistry{}).Where("barcode = ?", barcodeStr).Count(&existingCount)
-		if existingCount == 0 {
-			return barcodeStr, nil
+		if maxBatchBarcode > maxBarcode {
+			maxBarcode = maxBatchBarcode
 		}
 	}
 
-	// Ultimate fallback with timestamp if sequence is out of sync
+	var nextNum int64 = 1
+	if maxBarcode != "" {
+		digits := strings.TrimPrefix(maxBarcode, prefix)
+		if val, err := strconv.ParseInt(digits, 10, 64); err == nil {
+			nextNum = val + 1
+		}
+	}
+
+	// 3. Loop until we find a guaranteed unique barcode
+	for i := 0; i < 1000; i++ {
+		candidate := fmt.Sprintf("%s%08d", prefix, nextNum+int64(i))
+
+		var countReg, countBatch int64
+		db.Model(&model.BarcodeRegistry{}).Where("barcode = ?", candidate).Count(&countReg)
+		db.Model(&model.InventoryBatch{}).Where("barcode = ?", candidate).Count(&countBatch)
+
+		if countReg == 0 && countBatch == 0 {
+			// Advance DB sequence if postgres sequence exists
+			var seqName string
+			switch prefix {
+			case "PRD":
+				seqName = "barcode_product_seq"
+			case "BAT":
+				seqName = "barcode_batch_seq"
+			case "LOC":
+				seqName = "barcode_location_seq"
+			}
+			if seqName != "" {
+				_ = db.Exec(fmt.Sprintf("SELECT setval('%s', %d, true)", seqName, nextNum+int64(i)))
+			}
+			return candidate, nil
+		}
+	}
+
+	// Fallback timestamp if 1000 candidates collided
 	return fmt.Sprintf("%s%d", prefix, time.Now().UnixNano()/100000), nil
 }

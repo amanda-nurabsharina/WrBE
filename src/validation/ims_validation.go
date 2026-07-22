@@ -60,31 +60,31 @@ type UpdatePackagingUnit struct {
 }
 
 type InwardRequest struct {
-	SupplierID    string  `json:"supplier_id" validate:"required,uuid"`
-	InvoiceNo     string  `json:"invoice_no" validate:"required,min=3,max=50"`
-	ProductID     string  `json:"product_id" validate:"required,uuid"`
-	BatchNumber   string  `json:"batch_number" validate:"required,min=2,max=50"`
+	SupplierID    string  `json:"supplier_id"`
+	InvoiceNo     string  `json:"invoice_no"`
+	ProductID     string  `json:"product_id" validate:"required"`
+	BatchNumber   string  `json:"batch_number" validate:"required"`
 	ExpiredDate   string  `json:"expired_date" validate:"required"` // Format: YYYY-MM-DD
 	Qty           int     `json:"qty" validate:"required,gt=0"`
-	PurchasePrice float64 `json:"purchase_price" validate:"required,gt=0"`
-	WarehouseID   string  `json:"warehouse_id" validate:"required,uuid"`
-	LocationID    string  `json:"location_id" validate:"required,uuid"`
-	POID          string  `json:"po_id" validate:"omitempty,uuid"`
+	PurchasePrice float64 `json:"purchase_price"`
+	WarehouseID   string  `json:"warehouse_id" validate:"required"`
+	LocationID    string  `json:"location_id" validate:"required"`
+	POID          string  `json:"po_id"`
 	ProofDocument string  `json:"proof_document"`
-	Status        string  `json:"status" validate:"omitempty,oneof=draft completed"`
+	Status        string  `json:"status"`
 }
 
 type OutwardRequest struct {
-	ProductID     string  `json:"product_id" validate:"required,uuid"`
+	ProductID     string  `json:"product_id" validate:"required"`
 	Qty           int     `json:"qty" validate:"required,gt=0"`
-	Purpose       string  `json:"purpose" validate:"max=100"`
-	Description   string  `json:"description" validate:"max=255"`
-	SOID          string  `json:"so_id" validate:"omitempty,uuid"`
-	SellingPrice  float64 `json:"selling_price" validate:"omitempty,min=0"`
+	Purpose       string  `json:"purpose"`
+	Description   string  `json:"description"`
+	SOID          string  `json:"so_id"`
+	SellingPrice  float64 `json:"selling_price"`
 	Destination   string  `json:"destination"`
 	ProofDocument string  `json:"proof_document"`
-	Status        string  `json:"status" validate:"omitempty,oneof=draft completed"`
-	InvoiceNo     string  `json:"invoice_no" validate:"required,min=3,max=50"`
+	Status        string  `json:"status"`
+	InvoiceNo     string  `json:"invoice_no"`
 }
 
 type UpdateTransactionRequest struct {

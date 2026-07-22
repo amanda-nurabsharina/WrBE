@@ -454,6 +454,7 @@ func seedDatabase(db *gorm.DB) {
 		b1 := model.InventoryBatch{
 			ProductID:     p1.ID,
 			BatchNumber:   "B-NPK-EXP",
+			Barcode:       "BAT00000001",
 			ExpiredDate:   now.AddDate(0, 0, -10), // expired 10 days ago
 			Qty:           20,
 			WarehouseID:   warehouse.ID,
@@ -465,6 +466,7 @@ func seedDatabase(db *gorm.DB) {
 		b2 := model.InventoryBatch{
 			ProductID:     p1.ID,
 			BatchNumber:   "B-NPK-30D",
+			Barcode:       "BAT00000002",
 			ExpiredDate:   now.AddDate(0, 0, 15), // expires in 15 days
 			Qty:           50,
 			WarehouseID:   warehouse.ID,
@@ -476,6 +478,7 @@ func seedDatabase(db *gorm.DB) {
 		b3 := model.InventoryBatch{
 			ProductID:     p1.ID,
 			BatchNumber:   "B-NPK-90D",
+			Barcode:       "BAT00000003",
 			ExpiredDate:   now.AddDate(0, 0, 60), // expires in 60 days
 			Qty:           30,
 			WarehouseID:   warehouse.ID,
@@ -487,6 +490,7 @@ func seedDatabase(db *gorm.DB) {
 		b4 := model.InventoryBatch{
 			ProductID:     p1.ID,
 			BatchNumber:   "B-NPK-SAFE",
+			Barcode:       "BAT00000004",
 			ExpiredDate:   now.AddDate(0, 0, 180), // expires in 180 days
 			Qty:           100,
 			WarehouseID:   warehouse.ID,
@@ -499,6 +503,7 @@ func seedDatabase(db *gorm.DB) {
 		b5 := model.InventoryBatch{
 			ProductID:     p2.ID,
 			BatchNumber:   "B-GLY-SAFE",
+			Barcode:       "BAT00000005",
 			ExpiredDate:   now.AddDate(0, 0, 120), // expires in 120 days
 			Qty:           80,
 			WarehouseID:   warehouse.ID,
@@ -512,6 +517,13 @@ func seedDatabase(db *gorm.DB) {
 		db.Create(&b3)
 		db.Create(&b4)
 		db.Create(&b5)
+
+		// Register seed batch barcodes
+		db.Create(&model.BarcodeRegistry{Barcode: "BAT00000001", Type: "BATCH", ReferenceID: b1.ID})
+		db.Create(&model.BarcodeRegistry{Barcode: "BAT00000002", Type: "BATCH", ReferenceID: b2.ID})
+		db.Create(&model.BarcodeRegistry{Barcode: "BAT00000003", Type: "BATCH", ReferenceID: b3.ID})
+		db.Create(&model.BarcodeRegistry{Barcode: "BAT00000004", Type: "BATCH", ReferenceID: b4.ID})
+		db.Create(&model.BarcodeRegistry{Barcode: "BAT00000005", Type: "BATCH", ReferenceID: b5.ID})
 
 		// Create corresponding IN stock transactions
 		if seededSuperAdmin.ID != uuid.Nil {

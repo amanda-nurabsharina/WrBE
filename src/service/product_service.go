@@ -1,6 +1,7 @@
 package service
 
 import (
+	"app/src/barcode"
 	"app/src/model"
 	"app/src/utils"
 	"app/src/validation"
@@ -173,9 +174,16 @@ func (s *productService) CreateProduct(c *fiber.Ctx, req *validation.CreateProdu
 				parsedExpDate = time.Now().AddDate(2, 0, 0)
 			}
 
+			batchID := uuid.New()
+			gen := barcode.NewGenerator()
+			barcodeStr, _ := gen.Generate(s.DB.WithContext(c.Context()), "BAT")
+			s.DB.WithContext(c.Context()).Create(&model.BarcodeRegistry{Barcode: barcodeStr, Type: "BATCH", ReferenceID: batchID})
+
 			batch := model.InventoryBatch{
+				ID:            batchID,
 				ProductID:     product.ID,
 				BatchNumber:   req.InitialBatchNo,
+				Barcode:       barcodeStr,
 				ExpiredDate:   parsedExpDate,
 				Qty:           req.InitialQty,
 				WarehouseID:   warehouseUUID,

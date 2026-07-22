@@ -227,10 +227,18 @@ func (s *transactionService) CreateInwardTransaction(c *fiber.Ctx, userID string
 				return errMove
 			}
 		} else if errors.Is(errFind, gorm.ErrRecordNotFound) {
+			batchID := uuid.New()
+			barcodeStr, errBar := s.bcService.GenerateBarcode(txDb, "BAT", batchID)
+			if errBar != nil {
+				return errBar
+			}
+
 			// Batch doesn't exist: create new batch in waiting_put_away status
 			batch = model.InventoryBatch{
+				ID:            batchID,
 				ProductID:     pID,
 				BatchNumber:   req.BatchNumber,
+				Barcode:       barcodeStr,
 				ExpiredDate:   expDate,
 				Qty:           req.Qty,
 				AllocatedQty:  0,
@@ -245,16 +253,6 @@ func (s *transactionService) CreateInwardTransaction(c *fiber.Ctx, userID string
 
 			if errCreate := txDb.Create(&batch).Error; errCreate != nil {
 				return errCreate
-			}
-
-			// Generate sequential Batch Barcode and register it internally
-			barcodeStr, errBar := s.bcService.GenerateBarcode(txDb, "BAT", batch.ID)
-			if errBar != nil {
-				return errBar
-			}
-			batch.Barcode = barcodeStr
-			if errSaveBar := txDb.Save(&batch).Error; errSaveBar != nil {
-				return errSaveBar
 			}
 
 			// Create Inventory Movement log for receiving

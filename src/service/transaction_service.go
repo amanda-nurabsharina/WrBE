@@ -7,6 +7,7 @@ import (
 	"app/src/validation"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/go-playground/validator/v10"
@@ -14,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type TransactionService interface {
@@ -666,7 +668,7 @@ func (s *transactionService) UpdateTransaction(c *fiber.Ctx, id string, req *val
 				batch.PurchasePrice = req.Price
 			}
 
-			if errSave := txDb.Save(&batch).Error; errSave != nil {
+			if errSave := txDb.Omit(clause.Associations).Save(&batch).Error; errSave != nil {
 				return errSave
 			}
 
@@ -684,7 +686,7 @@ func (s *transactionService) UpdateTransaction(c *fiber.Ctx, id string, req *val
 				}
 			}
 
-			if errSaveTx := txDb.Save(&tx).Error; errSaveTx != nil {
+			if errSaveTx := txDb.Omit(clause.Associations).Save(&tx).Error; errSaveTx != nil {
 				return errSaveTx
 			}
 
@@ -696,7 +698,7 @@ func (s *transactionService) UpdateTransaction(c *fiber.Ctx, id string, req *val
 			}
 
 			batch.Qty = adjustedQty
-			if errSave := txDb.Save(&batch).Error; errSave != nil {
+			if errSave := txDb.Omit(clause.Associations).Save(&batch).Error; errSave != nil {
 				return errSave
 			}
 
@@ -718,7 +720,7 @@ func (s *transactionService) UpdateTransaction(c *fiber.Ctx, id string, req *val
 				tx.ProofDocument = req.ProofDocument
 			}
 
-			if errSaveTx := txDb.Save(&tx).Error; errSaveTx != nil {
+			if errSaveTx := txDb.Omit(clause.Associations).Save(&tx).Error; errSaveTx != nil {
 				return errSaveTx
 			}
 		}
@@ -837,11 +839,11 @@ func (s *transactionService) CompleteTransaction(c *fiber.Ctx, id string, proofD
 			}
 		}
 
-		if errSaveBatch := txDb.Save(&batch).Error; errSaveBatch != nil {
+		if errSaveBatch := txDb.Omit(clause.Associations).Save(&batch).Error; errSaveBatch != nil {
 			return errSaveBatch
 		}
 
-		if errSaveTx := txDb.Save(&tx).Error; errSaveTx != nil {
+		if errSaveTx := txDb.Omit(clause.Associations).Save(&tx).Error; errSaveTx != nil {
 			return errSaveTx
 		}
 

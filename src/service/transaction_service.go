@@ -626,7 +626,11 @@ func (s *transactionService) UpdateTransaction(c *fiber.Ctx, id string, req *val
 			return err
 		}
 
-		if tx.TransactionType == "IN" {
+		if req.Qty <= 0 {
+			req.Qty = tx.Qty
+		}
+
+		if strings.EqualFold(tx.TransactionType, "IN") {
 			// Inward edit: Qty adjustment check
 			adjustedQty := batch.Qty - tx.Qty + req.Qty
 			if adjustedQty < 0 {
@@ -639,25 +643,24 @@ func (s *transactionService) UpdateTransaction(c *fiber.Ctx, id string, req *val
 				batch.BatchNumber = req.BatchNumber
 			}
 			if req.ExpiredDate != "" {
-				expDate, err := time.Parse("2006-01-02", req.ExpiredDate)
-				if err != nil {
-					return fmt.Errorf("invalid expired date format")
+				dateStr := req.ExpiredDate
+				if len(dateStr) >= 10 {
+					dateStr = dateStr[:10]
 				}
-				batch.ExpiredDate = expDate
+				expDate, err := time.Parse("2006-01-02", dateStr)
+				if err == nil {
+					batch.ExpiredDate = expDate
+				}
 			}
 			if req.WarehouseID != "" {
-				wID, err := uuid.Parse(req.WarehouseID)
-				if err != nil {
-					return fmt.Errorf("invalid warehouse id")
+				if wID, err := uuid.Parse(req.WarehouseID); err == nil {
+					batch.WarehouseID = wID
 				}
-				batch.WarehouseID = wID
 			}
 			if req.LocationID != "" {
-				locID, err := uuid.Parse(req.LocationID)
-				if err != nil {
-					return fmt.Errorf("invalid location id")
+				if locID, err := uuid.Parse(req.LocationID); err == nil {
+					batch.LocationID = locID
 				}
-				batch.LocationID = locID
 			}
 			if req.Price > 0 {
 				batch.PurchasePrice = req.Price
@@ -669,11 +672,14 @@ func (s *transactionService) UpdateTransaction(c *fiber.Ctx, id string, req *val
 
 			// Update transaction
 			tx.Qty = req.Qty
-			tx.ReferenceNo = req.ReferenceNo
-			tx.ProofDocument = req.ProofDocument
+			if req.ReferenceNo != "" {
+				tx.ReferenceNo = req.ReferenceNo
+			}
+			if req.ProofDocument != "" {
+				tx.ProofDocument = req.ProofDocument
+			}
 			if req.SupplierID != "" {
-				supID, err := uuid.Parse(req.SupplierID)
-				if err == nil {
+				if supID, err := uuid.Parse(req.SupplierID); err == nil {
 					tx.SupplierID = &supID
 				}
 			}
@@ -682,7 +688,7 @@ func (s *transactionService) UpdateTransaction(c *fiber.Ctx, id string, req *val
 				return errSaveTx
 			}
 
-		} else if tx.TransactionType == "OUT" {
+		} else if strings.EqualFold(tx.TransactionType, "OUT") {
 			// Outward edit: Qty adjustment check
 			adjustedQty := batch.Qty + tx.Qty - req.Qty
 			if adjustedQty < 0 {
@@ -696,11 +702,21 @@ func (s *transactionService) UpdateTransaction(c *fiber.Ctx, id string, req *val
 
 			// Update transaction
 			tx.Qty = req.Qty
-			tx.SellingPrice = req.Price
-			tx.ReferenceNo = req.ReferenceNo
-			tx.Destination = req.Destination
-			tx.Description = req.Description
-			tx.ProofDocument = req.ProofDocument
+			if req.Price > 0 {
+				tx.SellingPrice = req.Price
+			}
+			if req.ReferenceNo != "" {
+				tx.ReferenceNo = req.ReferenceNo
+			}
+			if req.Destination != "" {
+				tx.Destination = req.Destination
+			}
+			if req.Description != "" {
+				tx.Description = req.Description
+			}
+			if req.ProofDocument != "" {
+				tx.ProofDocument = req.ProofDocument
+			}
 
 			if errSaveTx := txDb.Save(&tx).Error; errSaveTx != nil {
 				return errSaveTx
@@ -736,7 +752,7 @@ func (s *transactionService) CompleteTransaction(c *fiber.Ctx, id string, proofD
 		return nil, fiber.NewError(fiber.StatusInternalServerError, "Database error")
 	}
 
-	if tx.Status != "draft" {
+	if !strings.EqualFold(tx.Status, "draft") {
 		return nil, fiber.NewError(fiber.StatusBadRequest, "Only draft transactions can be completed")
 	}
 
@@ -752,7 +768,7 @@ func (s *transactionService) CompleteTransaction(c *fiber.Ctx, id string, proofD
 			tx.ProofDocument = proofDocument
 		}
 
-		if tx.TransactionType == "IN" {
+		if strings.EqualFold(tx.TransactionType, "IN") {
 			// Determine final batch status
 			var product model.Product
 			if errProd := txDb.First(&product, "id = ?", batch.ProductID).Error; errProd != nil {

@@ -88,7 +88,7 @@ type OutwardRequest struct {
 }
 
 type UpdateTransactionRequest struct {
-	Qty           int     `json:"qty" validate:"required,gt=0"`
+	Qty           int     `json:"qty" validate:"min=0"`
 	Price         float64 `json:"price" validate:"min=0"`
 	ReferenceNo   string  `json:"reference_no"`
 	BatchNumber   string  `json:"batch_number"`

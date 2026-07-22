@@ -28,11 +28,11 @@ func (ctrl *TransactionController) GetTransactions(c *fiber.Ctx) error {
 	if txType == "" {
 		path := c.Path()
 		if strings.HasSuffix(path, "/in") {
-			txType = "in"
+			txType = "IN"
 		} else if strings.HasSuffix(path, "/out") {
-			txType = "out"
+			txType = "OUT"
 		} else if strings.HasSuffix(path, "/adjustment") {
-			txType = "adjustment"
+			txType = "ADJUSTMENT"
 		}
 	}
 

@@ -55,7 +55,7 @@ func (s *transactionService) GetTransactions(c *fiber.Ctx, search string, txType
 		Order("created_at desc")
 
 	if txType != "" {
-		query = query.Where("transaction_type = ?", txType)
+		query = query.Where("UPPER(transaction_type) = UPPER(?)", txType)
 	}
 
 	if search != "" {

@@ -19,6 +19,7 @@ type CreateProduct struct {
 	StorageTemp         string  `json:"storage_temp"`
 	StorageHumidity     string  `json:"storage_humidity"`
 	StorageRestrictions string  `json:"storage_restrictions"`
+	DefaultLocationID   string  `json:"default_location_id"`
 	// Optional Initial Batch Details
 	InitialBatchNo      string  `json:"initial_batch_no"`
 	InitialQty          int     `json:"initial_qty"`
@@ -44,6 +45,7 @@ type UpdateProduct struct {
 	StorageTemp         string   `json:"storage_temp"`
 	StorageHumidity     string   `json:"storage_humidity"`
 	StorageRestrictions string   `json:"storage_restrictions"`
+	DefaultLocationID   string   `json:"default_location_id"`
 }
 
 type CreatePackagingUnit struct {

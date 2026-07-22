@@ -38,7 +38,7 @@ func NewProductService(db *gorm.DB, validate *validator.Validate) ProductService
 
 func (s *productService) GetProducts(c *fiber.Ctx, search string) ([]model.Product, error) {
 	var products []model.Product
-	query := s.DB.WithContext(c.Context()).Model(&model.Product{}).Preload("PackagingUnit").Order("code asc")
+	query := s.DB.WithContext(c.Context()).Model(&model.Product{}).Preload("PackagingUnit").Preload("DefaultLocation").Order("code asc")
 
 	if search != "" {
 		query = query.Where("code LIKE ? OR name LIKE ? OR category_id LIKE ? OR sub_category LIKE ?", "%"+search+"%", "%"+search+"%", "%"+search+"%", "%"+search+"%")
@@ -84,7 +84,7 @@ func (s *productService) GetProductByID(c *fiber.Ctx, id string) (*model.Product
 		return nil, fiber.NewError(fiber.StatusBadRequest, "Invalid UUID format")
 	}
 
-	if err := s.DB.WithContext(c.Context()).Preload("PackagingUnit").First(&product, "id = ?", uid).Error; err != nil {
+	if err := s.DB.WithContext(c.Context()).Preload("PackagingUnit").Preload("DefaultLocation").First(&product, "id = ?", uid).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, fiber.NewError(fiber.StatusNotFound, "Product not found")
 		}
@@ -120,25 +120,34 @@ func (s *productService) CreateProduct(c *fiber.Ctx, req *validation.CreateProdu
 		return nil, fiber.NewError(fiber.StatusBadRequest, "Invalid Packaging Unit UUID format")
 	}
 
+	var defaultLocUUID *uuid.UUID
+	if req.DefaultLocationID != "" {
+		locID, errLoc := uuid.Parse(req.DefaultLocationID)
+		if errLoc == nil {
+			defaultLocUUID = &locID
+		}
+	}
+
 	product := model.Product{
-		Code:             req.Code,
-		Barcode:          req.Barcode,
-		Name:             req.Name,
-		CategoryID:       req.CategoryID,
-		Unit:             req.Unit,
-		MinimumStock:     req.MinimumStock,
-		RegCategory:      req.RegCategory,
-		KementanRegNo:    req.KementanRegNo,
-		MSDSReference:    req.MSDSReference,
-		SubCategory:      req.SubCategory,
-		PackagingUnitID:  packUUID,
-		ConversionRatio:  req.ConversionRatio,
-		PurchasePrice:    req.PurchasePrice,
-		PriceDistributor: req.PriceDistributor,
-		PriceRetail:      req.PriceRetail,
+		Code:                req.Code,
+		Barcode:             req.Barcode,
+		Name:                req.Name,
+		CategoryID:          req.CategoryID,
+		Unit:                req.Unit,
+		MinimumStock:        req.MinimumStock,
+		RegCategory:         req.RegCategory,
+		KementanRegNo:       req.KementanRegNo,
+		MSDSReference:       req.MSDSReference,
+		SubCategory:         req.SubCategory,
+		PackagingUnitID:     packUUID,
+		ConversionRatio:     req.ConversionRatio,
+		PurchasePrice:       req.PurchasePrice,
+		PriceDistributor:    req.PriceDistributor,
+		PriceRetail:         req.PriceRetail,
 		StorageTemp:         req.StorageTemp,
 		StorageHumidity:     req.StorageHumidity,
 		StorageRestrictions: req.StorageRestrictions,
+		DefaultLocationID:   defaultLocUUID,
 	}
 
 	if err := s.DB.WithContext(c.Context()).Create(&product).Error; err != nil {
@@ -197,8 +206,8 @@ func (s *productService) CreateProduct(c *fiber.Ctx, req *validation.CreateProdu
 		}
 	}
 
-	// Preload the PackagingUnit relation
-	s.DB.WithContext(c.Context()).Preload("PackagingUnit").First(&product, "id = ?", product.ID)
+	// Preload relations
+	s.DB.WithContext(c.Context()).Preload("PackagingUnit").Preload("DefaultLocation").First(&product, "id = ?", product.ID)
 
 	LogCtxActivity(s.DB, c, "CREATE", "products", product.ID.String(), "Created product: "+product.Name+" ("+product.Code+")")
 
@@ -249,6 +258,12 @@ func (s *productService) UpdateProduct(c *fiber.Ctx, id string, req *validation.
 		}
 		product.PackagingUnitID = packUUID
 	}
+	if req.DefaultLocationID != "" {
+		locUUID, errLoc := uuid.Parse(req.DefaultLocationID)
+		if errLoc == nil {
+			product.DefaultLocationID = &locUUID
+		}
+	}
 	if req.ConversionRatio != nil {
 		product.ConversionRatio = *req.ConversionRatio
 	}
@@ -276,8 +291,8 @@ func (s *productService) UpdateProduct(c *fiber.Ctx, id string, req *validation.
 		return nil, fiber.NewError(fiber.StatusInternalServerError, "Database error")
 	}
 
-	// Preload the PackagingUnit relation
-	s.DB.WithContext(c.Context()).Preload("PackagingUnit").First(product, "id = ?", product.ID)
+	// Preload relations
+	s.DB.WithContext(c.Context()).Preload("PackagingUnit").Preload("DefaultLocation").First(product, "id = ?", product.ID)
 
 	LogCtxActivity(s.DB, c, "UPDATE", "products", product.ID.String(), "Updated product: "+product.Name+" ("+product.Code+")")
 

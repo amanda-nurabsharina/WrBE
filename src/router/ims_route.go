@@ -143,7 +143,13 @@ func IMSRoutes(
 	reports.Get("/distribution", repController.GetDistributionReport)
 	reports.Get("/reorder-point", repController.GetReorderPointReport)
 
-	// Metadata Dropdowns
+	// Metadata Dropdowns & Warehouse / Location CRUD
 	v1.Get("/warehouses", auth, metaController.GetWarehouses)
+	v1.Post("/warehouses", auth, metaController.CreateWarehouse)
+	v1.Put("/warehouses/:id", auth, metaController.UpdateWarehouse)
+	v1.Delete("/warehouses/:id", auth, metaController.DeleteWarehouse)
 	v1.Get("/locations", auth, metaController.GetLocations)
+	v1.Post("/locations", auth, metaController.CreateLocation)
+	v1.Put("/locations/:id", auth, metaController.UpdateLocation)
+	v1.Delete("/locations/:id", auth, metaController.DeleteLocation)
 }

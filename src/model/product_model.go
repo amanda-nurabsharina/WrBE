@@ -28,7 +28,9 @@ type Product struct {
 	StorageTemp         string        `gorm:"type:varchar(50)" json:"storage_temp"`
 	StorageHumidity     string        `gorm:"type:varchar(50)" json:"storage_humidity"`
 	StorageRestrictions string        `gorm:"type:text" json:"storage_restrictions"`
-	Stock            int           `gorm:"-" json:"stock"`
+	DefaultLocationID   *uuid.UUID    `gorm:"type:uuid" json:"default_location_id"`
+	DefaultLocation     *Location     `gorm:"foreignKey:DefaultLocationID;references:ID" json:"default_location"`
+	Stock               int           `gorm:"-" json:"stock"`
 	CreatedAt        time.Time     `gorm:"autoCreateTime:milli" json:"created_at"`
 	UpdatedAt        time.Time     `gorm:"autoCreateTime:milli;autoUpdateTime:milli" json:"updated_at"`
 }

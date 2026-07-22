@@ -668,6 +668,14 @@ func (s *transactionService) UpdateTransaction(c *fiber.Ctx, id string, req *val
 				batch.PurchasePrice = req.Price
 			}
 
+			if batch.Barcode == "" {
+				gen := barcode.NewGenerator()
+				if barcodeStr, errBar := gen.Generate(txDb, "BAT"); errBar == nil {
+					batch.Barcode = barcodeStr
+					txDb.Create(&model.BarcodeRegistry{Barcode: barcodeStr, Type: "BATCH", ReferenceID: batch.ID})
+				}
+			}
+
 			if errSave := txDb.Omit(clause.Associations).Save(&batch).Error; errSave != nil {
 				return errSave
 			}
@@ -698,6 +706,13 @@ func (s *transactionService) UpdateTransaction(c *fiber.Ctx, id string, req *val
 			}
 
 			batch.Qty = adjustedQty
+			if batch.Barcode == "" {
+				gen := barcode.NewGenerator()
+				if barcodeStr, errBar := gen.Generate(txDb, "BAT"); errBar == nil {
+					batch.Barcode = barcodeStr
+					txDb.Create(&model.BarcodeRegistry{Barcode: barcodeStr, Type: "BATCH", ReferenceID: batch.ID})
+				}
+			}
 			if errSave := txDb.Omit(clause.Associations).Save(&batch).Error; errSave != nil {
 				return errSave
 			}
@@ -811,7 +826,7 @@ func (s *transactionService) CompleteTransaction(c *fiber.Ctx, id string, proofD
 					txDb.Save(&po)
 				}
 			}
-		} else if tx.TransactionType == "OUT" {
+		} else if strings.EqualFold(tx.TransactionType, "OUT") {
 			// If linked to SO, perform SO progress update now!
 			if tx.SOID != nil {
 				var so model.SalesOrder
@@ -836,6 +851,14 @@ func (s *transactionService) CompleteTransaction(c *fiber.Ctx, id string, proofD
 					}
 					txDb.Save(&so)
 				}
+			}
+		}
+
+		if batch.Barcode == "" {
+			gen := barcode.NewGenerator()
+			if barcodeStr, errBar := gen.Generate(txDb, "BAT"); errBar == nil {
+				batch.Barcode = barcodeStr
+				txDb.Create(&model.BarcodeRegistry{Barcode: barcodeStr, Type: "BATCH", ReferenceID: batch.ID})
 			}
 		}
 
